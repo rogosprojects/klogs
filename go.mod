@@ -1,4 +1,4 @@
-module klogs
+module github.com/rogosprojects/klogs
 
 go 1.22.5
 
