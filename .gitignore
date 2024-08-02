@@ -1,0 +1,28 @@
+# Any logs
+**/*.log
+
+# Compiled binary files
+*.out
+klogs
+
+# Dependency directories
+vendor/
+_workspace/
+
+# Overriding any defaults
+GOPATH/
+GOROOT/
+GOLINT
+GOTESTSUM
+
+# Logs and databases
+*.log
+*.db
+*.sql
+*.sqlite3
+*.sqlite3-journal
+
+# OS generated files
+.DS_Store*
+Thumbs.db
+ehthumbs.db
