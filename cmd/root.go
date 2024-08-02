@@ -263,7 +263,7 @@ var rootCmd = &cobra.Command{
 Get logs from pods with a specific label in a namespace and save them to a file.
 Usage: klogs -n <namespace> -l <label>.
 If no namespace is provided, the command will use the current context in the kubeconfig file.
-If no label is provided, the command will list all pods in the namespace and prompt the user to select one.
+If no label is provided, the command will list all pods in the namespace and prompt the user to select one. Collect all the logs even if the pod has multiple containers.
 If logpath is provided, the logs will be saved to that path instead of the default logs/ directory.`,
 
 	Run: func(cmd *cobra.Command, args []string) {

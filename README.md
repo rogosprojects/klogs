@@ -10,7 +10,7 @@ Kubernetes log extractor written in GO. Blazing fast. 🔥
 
 ## Features
 
-- **Efficient Log Extraction**: Quickly extracts logs from specified Kubernetes pods.
+- **Efficient Log Extraction**: Quickly collect logs from Kubernetes pods even if the pod has multiple containers.
 - **Namespace Support**: Allows targeting logs within specific namespaces.
 - **Label Filtering**: Extract logs from pods matching specific labels.
 - **Multiple-Pods Log Download**: Supports downloading logs from multiple pods simultaneously, enhancing efficiency when dealing with large-scale deployments.
