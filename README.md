@@ -1,6 +1,6 @@
 # klogs
 
-![logo](./path/to/logo.png) <!-- Replace with the actual logo path -->
+Kubernetes log extractor written in GO. Blazing fast. 🔥
 
 ## Overview
 
