@@ -40,6 +40,7 @@ jobs:
       run: |
         echo "RELEASE_TAG=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
         echo "REPOSITORY_NAME=${GITHUB_REPOSITORY#*/}" >> $GITHUB_ENV
+        echo "PACKAGE_NAME=${GITHUB_REPOSITORY}" >> $GITHUB_ENV
         echo "OS_NAME=${{ matrix.goos }}" >> $GITHUB_ENV
     - name: OS darwin
       if: matrix.goos == 'darwin'
@@ -55,4 +56,4 @@ jobs:
         compress_assets: FALSE
         executable_compression: upx -v
         md5sum: false
-        ldflags: '-X ${GITHUB_REPOSITORY}/cmd.BuildVersion=${{ env.RELEASE_TAG }}'
+        ldflags: '-X ${{ env.PACKAGE_NAME }}/cmd.BuildVersion=${{ env.RELEASE_TAG }}'
