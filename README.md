@@ -18,7 +18,14 @@ Kubernetes log extractor written in GO. Blazing fast. 🔥
 
 ## Installation
 
-To install klogs, ensure you have Go installed on your system. Then, clone the repository and build the binary:
+### From binaries
+
+Simply download [latest binaries](https://github.com/rogosprojects/klogs/releases/latest/download/klogs).
+
+### From sources
+
+To compile and install _klogs_ from sources, ensure you have Go installed on your system.
+Then, clone the repository and build the binary:
 
 ```
 go install github.com/rogosprojects/klogs@latest
@@ -49,6 +56,6 @@ klogs -l app=batch-ui -l spring.app=myApp
 ```
 Interactive select any Pods by Namespace
 ```
-kglos -n my-custom-namespace
+klogs -n my-custom-namespace
 ```
 ![Select Pods](/assets/klogs-select-pods.png)
