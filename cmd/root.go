@@ -25,7 +25,7 @@ import (
 )
 
 // BuildVersion is the version of the build, passed in by the build system
-var BuildVersion string
+var BuildVersion = "development"
 
 var kubeconfig, namespace, customLogPath *string
 var client *kubernetes.Clientset
