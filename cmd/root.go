@@ -240,7 +240,10 @@ func saveLogs(logs io.ReadCloser) {
 		return
 	}
 
-	os.MkdirAll(fileLogs.Path, 0755)
+	if err := os.MkdirAll(fileLogs.Path, 0755); err != nil {
+		panic(err.Error())
+	}
+
 	err = os.WriteFile(fileLogs.Path+"/"+fileLogs.Name, buf.Bytes(), 0644)
 	if err != nil {
 		panic(err.Error())
