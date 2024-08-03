@@ -6,7 +6,6 @@ package cmd
 import (
 	"bytes"
 	"context"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -25,7 +24,7 @@ import (
 	"k8s.io/client-go/util/homedir"
 )
 
-var version = "1.1.1"
+var version = "1.1.3"
 
 var kubeconfig *string
 var client *kubernetes.Clientset
@@ -57,12 +56,6 @@ func configLogPath() {
 }
 
 func configClient() {
-	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = flag.String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
-	} else {
-		kubeconfig = flag.String("kubeconfig", "", "absolute path to the kubeconfig file")
-	}
-	flag.Parse()
 
 	// use the current context in kubeconfig
 	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
@@ -293,8 +286,13 @@ func Execute() {
 }
 
 func init() {
-	kubeconfig = rootCmd.Flags().String("kubeconfig", "", "absolute path to the kubeconfig file")
 	namespace = rootCmd.Flags().StringP("namespace", "n", "", "Select namespace")
 	labels = rootCmd.Flags().StringArrayP("label", "l", []string{}, "Select label")
 	customLogPath = rootCmd.Flags().StringP("logpath", "p", "", "Custom log path")
+
+	if home := homedir.HomeDir(); home != "" {
+		kubeconfig = rootCmd.Flags().String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+	} else {
+		kubeconfig = rootCmd.Flags().String("kubeconfig", "", "absolute path to the kubeconfig file")
+	}
 }
