@@ -1,5 +1,5 @@
 /*
-Copyright © 2024 rogosprojects
+Package cmd is the entry point for the command line tool. It defines the root command and its flags.
 */
 package cmd
 
@@ -24,11 +24,11 @@ import (
 	"k8s.io/client-go/util/homedir"
 )
 
-var version = "1.1.3"
+// BuildVersion is the version of the build, passed in by the build system
+var BuildVersion string
 
-var kubeconfig *string
+var kubeconfig, namespace, customLogPath *string
 var client *kubernetes.Clientset
-var namespace *string
 var labels *[]string
 
 type fileLog struct {
@@ -37,7 +37,6 @@ type fileLog struct {
 }
 
 var fileLogs = fileLog{Path: "logs/" + time.Now().Format("2006-01-02T15:04")}
-var customLogPath *string
 
 func splashScreen() {
 
@@ -46,7 +45,7 @@ func splashScreen() {
 		putils.LettersFromStringWithStyle("Logs", pterm.FgWhite.ToStyle())).
 		Render() // Render the big text to the terminal
 
-	pterm.DefaultParagraph.Printfln("Version: %s", version)
+	pterm.DefaultParagraph.Printfln("Version: %s", BuildVersion)
 }
 
 func configLogPath() {
@@ -278,6 +277,7 @@ If logpath is provided, the logs will be saved to that path instead of the defau
 	},
 }
 
+// Execute is the entry point for the command
 func Execute() {
 	err := rootCmd.Execute()
 	if err != nil {
