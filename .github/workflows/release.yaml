@@ -1,0 +1,59 @@
+name: go-releaser
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+jobs:
+  prepare-release:
+    name: Prepare relase
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: "Refresh tags"
+      id: tag
+      run: git fetch --tags --force # Is currently required for v3 due to https://github.com/actions/checkout/issues/290
+    - uses: ericcornelissen/git-tag-annotation-action@v2
+      id: tag-data
+    - name: GitHub Create Tag Release
+      uses: Roang-zero1/github-create-release-action@v2.1.0
+      with:
+        version_regex: ^v[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+
+        release_text: ${{ steps.tag-data.outputs.git-tag-annotation }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  releases-matrix:
+    name: Release Go Binary
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # build and publish in parallel: linux/386, linux/amd64, linux/arm64, windows/386, windows/amd64, darwin/amd64, darwin/arm64
+        goos: [linux, windows, darwin]
+        goarch: ["386", amd64, arm64]
+        exclude:
+          - goarch: "386"
+            goos: darwin
+          - goarch: arm64
+            goos: windows
+    steps:
+    - name: Get Release Info
+      run: |
+        echo "RELEASE_TAG=${GITHUB_REF/refs\/tags\//}" >> $GITHUB_ENV
+        echo "REPOSITORY_NAME=${GITHUB_REPOSITORY#*/}" >> $GITHUB_ENV
+        echo "OS_NAME=${{ matrix.goos }}" >> $GITHUB_ENV
+    - name: OS darwin
+      if: matrix.goos == 'darwin'
+      run: echo "OS_NAME=macOS" >> $GITHUB_ENV
+    - uses: actions/checkout@v3
+    - uses: wangyoucao577/go-release-action@v1.30
+      with:
+        github_token: ${{ secrets.GITHUB_TOKEN }}
+        goos: ${{ matrix.goos }}
+        goarch: ${{ matrix.goarch }}
+        goversion: "1.22"
+        asset_name: '${{ env.REPOSITORY_NAME }}-${{ env.RELEASE_TAG }}-${{ env.OS_NAME }}-${{ matrix.goarch }}'
+        compress_assets: FALSE
+        executable_compression: upx -v
+        md5sum: false
+        ldflags: '-X main.version=${{ GITHUB_REPOSITORY }}/cmd.BuildVersion=${{ env.RELEASE_TAG }}'
