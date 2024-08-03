@@ -42,7 +42,7 @@ Flags:
   -p, --logpath string    [optional]  Custom log path
   -n, --namespace string  [optional]  Select namespace
   -l, --label stringArray [optional]  Select label (or labels with multiple -l flags)
-  -r, --reverse           [optional]  Write logs in reverse order (date descending)
+  -r, --reverse boolean   [optional]  Write logs in reverse order (date descending)
 ````
 
 * If no namespace is provided, the command will use the current context in the kubeconfig file.
