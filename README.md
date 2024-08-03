@@ -40,3 +40,15 @@ Flags:
 * If no namespace is provided, the command will use the current context in the kubeconfig file.
 * If no label is provided, the command will list all pods in the namespace and prompt the user to select one.
 * If logpath is provided, the logs will be saved to that path instead of the default logs/ directory.
+
+### Examples
+
+Use current namespace, just pick Pods by labels:
+```
+klogs -l app=batch-ui -l spring.app=myApp
+```
+Interactive select any Pods by Namespace
+```
+kglos -n my-custom-namespace
+```
+![Select Pods](/assets/klogs-select-pods.png)
