@@ -1,5 +1,6 @@
 # Any logs
 **/*.log
+logs/*
 
 # Compiled binary files
 *.out
