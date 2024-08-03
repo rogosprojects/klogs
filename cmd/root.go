@@ -212,11 +212,11 @@ func getPodLogs(namespace string, pods v1.PodList) {
 
 func findPodByLabel(namespace string, label string) {
 
-	pterm.Info.Printfln("Getting pods in namespace %s with label app=%s\n\n", pterm.Green(namespace), pterm.Green(label))
+	pterm.Info.Printfln("Getting pods in namespace %s with label %s\n\n", pterm.Green(namespace), pterm.Green(label))
 	spinner1, _ := pterm.DefaultSpinner.Start()
 
 	pods, err := client.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
-		LabelSelector: "app=" + label,
+		LabelSelector: label,
 	})
 	if statusError, isStatus := err.(*errors.StatusError); isStatus {
 		fmt.Printf("Error getting pods in namespace %s: %v\n",
