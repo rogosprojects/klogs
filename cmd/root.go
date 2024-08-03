@@ -30,6 +30,7 @@ var BuildVersion string
 var kubeconfig, namespace, customLogPath *string
 var client *kubernetes.Clientset
 var labels *[]string
+var logReverse *bool
 
 type fileLog struct {
 	Name string
@@ -193,7 +194,7 @@ func getPodLogs(namespace string, pods v1.PodList) {
 			defer logs.Close()
 
 			fileLogs.Name = fmt.Sprintf("%s-%s.log", pod.Name, container.Name)
-			saveLogs(logs)
+			saveLog(logs)
 
 			containerTree := []pterm.TreeNode{{Text: container.Name}}
 			podTree.Children = append(podTree.Children, containerTree...)
@@ -227,8 +228,7 @@ func findPodByLabel(namespace string, label string) {
 	spinner1.Stop()
 }
 
-func saveLogs(logs io.ReadCloser) {
-
+func saveLog(logs io.ReadCloser) {
 	buf := new(bytes.Buffer)
 	_, err := io.Copy(buf, logs)
 	if err != nil {
@@ -240,15 +240,26 @@ func saveLogs(logs io.ReadCloser) {
 		return
 	}
 
+	bufBytes := buf.Bytes()
+
+	if *logReverse {
+		// Split the buffer into lines and reverse the order
+		lines := bytes.Split(bufBytes, []byte("\n"))
+		for i, j := 0, len(lines)-1; i < j; i, j = i+1, j-1 {
+			lines[i], lines[j] = lines[j], lines[i]
+		}
+
+		// Join the reversed lines back into a single byte slice
+		bufBytes = bytes.Join(lines, []byte("\n"))
+	}
+
 	if err := os.MkdirAll(fileLogs.Path, 0755); err != nil {
 		panic(err.Error())
 	}
-
-	err = os.WriteFile(fileLogs.Path+"/"+fileLogs.Name, buf.Bytes(), 0644)
+	err = os.WriteFile(fileLogs.Path+"/"+fileLogs.Name, bufBytes, 0644)
 	if err != nil {
 		panic(err.Error())
 	}
-
 }
 
 var rootCmd = &cobra.Command{
@@ -292,6 +303,7 @@ func init() {
 	namespace = rootCmd.Flags().StringP("namespace", "n", "", "Select namespace")
 	labels = rootCmd.Flags().StringArrayP("label", "l", []string{}, "Select label")
 	customLogPath = rootCmd.Flags().StringP("logpath", "p", "", "Custom log path")
+	logReverse = rootCmd.Flags().BoolP("reverse", "r", false, "Write logs in reverse order (date descending)")
 
 	if home := homedir.HomeDir(); home != "" {
 		kubeconfig = rootCmd.Flags().String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")

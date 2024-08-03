@@ -1,4 +1,7 @@
 # Changelog
+# v1.1.9
+
+Added "-r" option to write logs in reverse order (date descending)
 
 # v1.1.6
 
