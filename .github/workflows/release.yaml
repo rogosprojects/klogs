@@ -17,7 +17,7 @@ jobs:
     - uses: ericcornelissen/git-tag-annotation-action@v2
       id: tag-data
     - name: GitHub Create Tag Release
-      uses: Roang-zero1/github-create-release-action@v2.1.0
+      uses: Roang-zero1/github-create-release-action@v3
       with:
         version_regex: ^v[[:digit:]]+\.[[:digit:]]+\.[[:digit:]]+
         release_text: ${{ steps.tag-data.outputs.git-tag-annotation }}
@@ -46,7 +46,7 @@ jobs:
       if: matrix.goos == 'darwin'
       run: echo "OS_NAME=macOS" >> $GITHUB_ENV
     - uses: actions/checkout@v3
-    - uses: wangyoucao577/go-release-action@v1.51
+    - uses: wangyoucao577/go-release-action@v1.30
       with:
         github_token: ${{ secrets.GITHUB_TOKEN }}
         goos: ${{ matrix.goos }}
@@ -56,4 +56,4 @@ jobs:
         compress_assets: FALSE
         executable_compression: upx -v
         md5sum: false
-        ldflags: '-X ${GITHUB_REPOSITORY}/cmd.BuildVersion=${{ env.RELEASE_TAG }}'
+        ldflags: '-X main.version=${GITHUB_REPOSITORY}/cmd.BuildVersion=${{ env.RELEASE_TAG }}'
