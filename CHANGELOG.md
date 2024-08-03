@@ -1,6 +1,5 @@
 # Changelog
 
-## v1.1.5
+# v1.1.6
 
-pass BuildVersion from the build system\
-code gardening
+pass BuildVersion from the build system
