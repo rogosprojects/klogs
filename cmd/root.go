@@ -31,6 +31,7 @@ var kubeconfig, namespace, customLogPath *string
 var client *kubernetes.Clientset
 var labels *[]string
 var logReverse *bool
+var anyLogFound = false
 
 type fileLog struct {
 	Name string
@@ -222,6 +223,7 @@ func findPodByLabel(namespace string, label string) {
 	// if pods are not found print message
 	if len(pods.Items) == 0 {
 		pterm.Error.Printfln("No pods found in namespace %s with label %s\n", namespace, label)
+		spinner1.Stop()
 		return
 	}
 	getPodLogs(namespace, *pods)
@@ -229,6 +231,8 @@ func findPodByLabel(namespace string, label string) {
 }
 
 func saveLog(logs io.ReadCloser) {
+	anyLogFound = true
+
 	buf := new(bytes.Buffer)
 	_, err := io.Copy(buf, logs)
 	if err != nil {
@@ -287,7 +291,9 @@ If logpath is provided, the logs will be saved to that path instead of the defau
 			findPodByLabel(*namespace, l)
 		}
 
-		pterm.Info.Printfln("Logs saved to %s", fileLogs.Path)
+		if anyLogFound {
+			pterm.Info.Printfln("Logs saved to %s", fileLogs.Path)
+		}
 	},
 }
 
