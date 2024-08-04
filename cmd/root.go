@@ -29,15 +29,16 @@ var (
 	BuildVersion = "development"
 )
 var (
-	kubeconfig, namespace, customLogPath *string
-	client                               *kubernetes.Clientset
-	labels                               *[]string
+	kubeconfig, namespace, customLogPath, since *string
+	client                                      *kubernetes.Clientset
+	labels                                      *[]string
+	tail                                        *int64
 )
 
 var (
-	fileLogs    = fileLog{Path: "logs/" + time.Now().Format("2006-01-02T15:04")}
-	logReverse  *bool
-	anyLogFound = false
+	fileLogs            = fileLog{Path: "logs/" + time.Now().Format("2006-01-02T15:04")}
+	logReverse, allPods *bool
+	anyLogFound         bool
 )
 
 type fileLog struct {
@@ -135,10 +136,26 @@ func listPods(namespace string) {
 		return
 	}
 
+	if !*allPods {
+		selectPods(&podNames)
+		if len(podNames) == 0 {
+			pterm.Error.Printfln("No pods selected")
+			return
+		}
+	}
+
+	for _, podName := range podNames {
+		var podList v1.PodList
+		podList.Items = append(podList.Items, podMap[podName])
+		getPodLogs(namespace, podList)
+	}
+}
+
+func selectPods(podNames *[]string) {
 	// Create a new interactive multiselect printer with the options
 	// Disable the filter and set the keys for confirming and selecting options
 	printer := pterm.DefaultInteractiveMultiselect.
-		WithOptions(podNames).
+		WithOptions(*podNames).
 		WithFilter(false).
 		WithKeyConfirm(keys.Enter).
 		WithKeySelect(keys.Space).
@@ -148,16 +165,7 @@ func listPods(namespace string) {
 	// Show the interactive multiselect and get the selected options
 	selectedPods, _ := printer.Show()
 
-	if len(selectedPods) == 0 {
-		pterm.Error.Printfln("No pods selected")
-		return
-	}
-
-	for _, podName := range selectedPods {
-		var podList v1.PodList
-		podList.Items = append(podList.Items, podMap[podName])
-		getPodLogs(namespace, podList)
-	}
+	*podNames = selectedPods
 }
 
 // Get the default namespace specified in the KUBECONFIG file current context
@@ -178,31 +186,50 @@ func getCurrentNamespace(kubeconfig string) string {
 
 func getPodLogs(namespace string, pods v1.PodList) {
 
+	logOpts := &v1.PodLogOptions{}
+	// Since
+	if *since != "" {
+		// After
+		duration, err := time.ParseDuration(*since)
+		if err != nil {
+			panic(err.Error())
+		}
+		s := int64(duration.Seconds())
+		logOpts.SinceSeconds = &s
+	}
+	// Tail
+	if *tail != -1 {
+		logOpts.TailLines = tail
+	}
+
 	for _, pod := range pods.Items {
 		pterm.Success.Printfln("Found pod %s \n", pod.Name)
 		podTree := pterm.TreeNode{Text: pod.Name}
 
 		// print each container in the pod
 		for _, container := range pod.Spec.Containers {
-
 			// get logs for the container
-			req := client.CoreV1().Pods(namespace).GetLogs(pod.Name, &v1.PodLogOptions{
-				Container: container.Name,
-			})
+			logOpts.Container = container.Name
+			// get logs for the container
+			req := client.CoreV1().Pods(namespace).GetLogs(pod.Name, logOpts)
 
-			// save logs to file
+			// get logs
 			logs, err := req.Stream(context.Background())
 			if err != nil {
 				pterm.Error.Printfln("Error getting logs for container %s\n%v", container.Name, err)
+				containerTree := []pterm.TreeNode{{Text: pterm.Red(container.Name)}}
+				podTree.Children = append(podTree.Children, containerTree...)
+
 				break
 				//panic(err.Error())
 			}
 
-			fileLogs.Name = fmt.Sprintf("%s-%s.log", pod.Name, container.Name)
-			saveLog(logs)
-
+			// add container to the tree
 			containerTree := []pterm.TreeNode{{Text: container.Name}}
 			podTree.Children = append(podTree.Children, containerTree...)
+
+			fileLogs.Name = fmt.Sprintf("%s-%s.log", pod.Name, container.Name)
+			saveLog(logs)
 		}
 		pterm.DefaultTree.WithRoot(podTree).Render()
 	}
@@ -243,6 +270,18 @@ func saveLog(logs io.ReadCloser) {
 			panic(err.Error())
 		}
 	}(logs)
+
+	// Test if logs is empty
+	bufTest := make([]byte, 1)
+	n, err := logs.Read(bufTest)
+	if err != nil && err != io.EOF {
+		panic(err.Error())
+	}
+	if n == 0 {
+		// some logs could be empty
+		pterm.Warning.Printfln("Empty logs for %s", fileLogs.Name)
+		return
+	}
 
 	// Create the log file
 	if err := os.MkdirAll(fileLogs.Path, 0755); err != nil {
@@ -326,11 +365,9 @@ func reverseLogFileInChunks(filePath string) {
 
 var rootCmd = &cobra.Command{
 	Use:   "klogs",
-	Short: "Get logs from pods with a specific label",
-	Long: `Get logs from pods with a specific label in a namespace and save them to a file.
-If no namespace is provided, the command will use the current context in the kubeconfig file.
-If no label is provided, the command will list all pods in the namespace and prompt the user to select one. Collect all the logs even if the pod has multiple containers.
-If no log path is provided, the logs will be saved in the "logs/datetime" directory in the current working directory.`,
+	Short: "Get logs from Pods, super fast! 🚀",
+	Long: `klogs is a CLI tool to get logs from Kubernetes Pods.
+It is designed to be fast and efficient, and can get logs from multiple Pods/Containers at once. Blazing fast. 🔥`,
 
 	Run: func(cmd *cobra.Command, args []string) {
 
@@ -367,6 +404,9 @@ func init() {
 	customLogPath = rootCmd.Flags().StringP("logpath", "p", "", "Custom log path")
 	logReverse = rootCmd.Flags().BoolP("reverse", "r", false, "Write logs in reverse order (date descending)")
 	kubeconfig = rootCmd.Flags().String("kubeconfig", "", "(optional) Absolute path to the kubeconfig file")
+	allPods = rootCmd.Flags().BoolP("all", "a", false, "Get logs for all pods in the namespace")
+	since = rootCmd.Flags().StringP("since", "s", "", "Only return logs newer than a relative duration like 5s, 2m, or 3h. Defaults to all logs.")
+	tail = rootCmd.Flags().Int64P("tail", "t", -1, "Lines of the most recent log to save")
 
 	if home := homedir.HomeDir(); home != "" && *kubeconfig == "" {
 		*kubeconfig = filepath.Join(home, ".kube", "config")
