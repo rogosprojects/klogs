@@ -2,7 +2,7 @@
 
 # v1.1.11
 
-Added "--since" option to fetch logs newer than a relative duration. 
+Added "--since" option to fetch logs newer than a relative duration. Added "--tail" option to get only the specified number of lines from the end of the logs.
 
 # v1.1.10
 

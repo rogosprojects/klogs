@@ -32,6 +32,7 @@ var (
 	kubeconfig, namespace, customLogPath, since *string
 	client                                      *kubernetes.Clientset
 	labels                                      *[]string
+	tail                                        *int64
 )
 
 var (
@@ -186,6 +187,7 @@ func getCurrentNamespace(kubeconfig string) string {
 func getPodLogs(namespace string, pods v1.PodList) {
 
 	logOpts := &v1.PodLogOptions{}
+	// Since
 	if *since != "" {
 		// After
 		duration, err := time.ParseDuration(*since)
@@ -194,6 +196,10 @@ func getPodLogs(namespace string, pods v1.PodList) {
 		}
 		s := int64(duration.Seconds())
 		logOpts.SinceSeconds = &s
+	}
+	// Tail
+	if *tail != -1 {
+		logOpts.TailLines = tail
 	}
 
 	for _, pod := range pods.Items {
@@ -301,11 +307,9 @@ func saveLog(logs io.ReadCloser) {
 
 var rootCmd = &cobra.Command{
 	Use:   "klogs",
-	Short: "Get logs from pods with a specific label",
-	Long: `Get logs from pods with a specific label in a namespace and save them to a file.
-If no namespace is provided, the command will use the current context in the kubeconfig file.
-If no label is provided, the command will list all pods in the namespace and prompt the user to select one. Collect all the logs even if the pod has multiple containers.
-If no log path is provided, the logs will be saved in the "logs/datetime" directory in the current working directory.`,
+	Short: "Get logs from Pods, super fast! 🚀",
+	Long: `klogs is a CLI tool to get logs from Kubernetes Pods.
+It is designed to be fast and efficient, and can get logs from multiple Pods/Containers at once. Blazing fast. 🔥`,
 
 	Run: func(cmd *cobra.Command, args []string) {
 
@@ -344,6 +348,7 @@ func init() {
 	kubeconfig = rootCmd.Flags().String("kubeconfig", "", "(optional) Absolute path to the kubeconfig file")
 	allPods = rootCmd.Flags().BoolP("all", "a", false, "Get logs for all pods in the namespace")
 	since = rootCmd.Flags().StringP("since", "s", "", "Only return logs newer than a relative duration like 5s, 2m, or 3h. Defaults to all logs.")
+	tail = rootCmd.Flags().Int64P("tail", "t", -1, "Lines of the most recent log to save")
 
 	if home := homedir.HomeDir(); home != "" && *kubeconfig == "" {
 		*kubeconfig = filepath.Join(home, ".kube", "config")
