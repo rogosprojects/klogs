@@ -244,34 +244,81 @@ func saveLog(logs io.ReadCloser) {
 		}
 	}(logs)
 
-	buf := new(bytes.Buffer)
-	_, err := io.Copy(buf, logs)
-	if err != nil {
-		panic(err.Error())
-	}
-
-	// some logs could be empty
-	if buf.Len() == 0 {
-		return
-	}
-
-	bufBytes := buf.Bytes()
-
-	if *logReverse {
-		// Split the buffer into lines and reverse the order
-		lines := bytes.Split(bufBytes, []byte("\n"))
-		for i, j := 0, len(lines)-1; i < j; i, j = i+1, j-1 {
-			lines[i], lines[j] = lines[j], lines[i]
-		}
-
-		// Join the reversed lines back into a single byte slice
-		bufBytes = bytes.Join(lines, []byte("\n"))
-	}
-
+	// Create the log file
 	if err := os.MkdirAll(fileLogs.Path, 0755); err != nil {
 		panic(err.Error())
 	}
-	err = os.WriteFile(fileLogs.Path+"/"+fileLogs.Name, bufBytes, 0644)
+	logFilePath := filepath.Join(fileLogs.Path, fileLogs.Name)
+	logFile, err := os.Create(logFilePath)
+	if err != nil {
+		panic(err.Error())
+	}
+	defer func(logFile *os.File) {
+		err := logFile.Close()
+		if err != nil {
+			panic(err.Error())
+		}
+	}(logFile)
+
+	// Read and write logs in chunks
+	buf := make([]byte, 4096) // 4KB chunks
+	for {
+		n, err := logs.Read(buf)
+		if err != nil && err != io.EOF {
+			panic(err.Error())
+		}
+		if n == 0 {
+			break
+		}
+		if _, err := logFile.Write(buf[:n]); err != nil {
+			panic(err.Error())
+		}
+	}
+
+	// If logReverse is enabled, reverse the lines in the file
+	if *logReverse {
+		reverseLogFileInChunks(logFilePath)
+	}
+}
+
+func reverseLogFileInChunks(filePath string) {
+	// Open the file for reading
+	file, err := os.Open(filePath)
+	if err != nil {
+		panic(err.Error())
+	}
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			panic(err.Error())
+		}
+	}(file)
+
+	// Read the entire file into memory in chunks
+	var content []byte
+	buf := make([]byte, 4096) // 4KB chunks
+	for {
+		n, err := file.Read(buf)
+		if err != nil && err != io.EOF {
+			panic(err.Error())
+		}
+		if n == 0 {
+			break
+		}
+		content = append(content, buf[:n]...)
+	}
+
+	// Split the content into lines and reverse the order
+	lines := bytes.Split(content, []byte("\n"))
+	for i, j := 0, len(lines)-1; i < j; i, j = i+1, j-1 {
+		lines[i], lines[j] = lines[j], lines[i]
+	}
+
+	// Join the reversed lines back into a single byte slice
+	reversedContent := bytes.Join(lines, []byte("\n"))
+
+	// Write the reversed content back to the file in chunks
+	err = os.WriteFile(filePath, reversedContent, 0644)
 	if err != nil {
 		panic(err.Error())
 	}
