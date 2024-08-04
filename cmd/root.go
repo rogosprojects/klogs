@@ -35,9 +35,9 @@ var (
 )
 
 var (
-	fileLogs    = fileLog{Path: "logs/" + time.Now().Format("2006-01-02T15:04")}
-	logReverse  *bool
-	anyLogFound = false
+	fileLogs            = fileLog{Path: "logs/" + time.Now().Format("2006-01-02T15:04")}
+	logReverse, allPods *bool
+	anyLogFound         bool
 )
 
 type fileLog struct {
@@ -135,10 +135,26 @@ func listPods(namespace string) {
 		return
 	}
 
+	if !*allPods {
+		selectPods(&podNames)
+		if len(podNames) == 0 {
+			pterm.Error.Printfln("No pods selected")
+			return
+		}
+	}
+
+	for _, podName := range podNames {
+		var podList v1.PodList
+		podList.Items = append(podList.Items, podMap[podName])
+		getPodLogs(namespace, podList)
+	}
+}
+
+func selectPods(podNames *[]string) {
 	// Create a new interactive multiselect printer with the options
 	// Disable the filter and set the keys for confirming and selecting options
 	printer := pterm.DefaultInteractiveMultiselect.
-		WithOptions(podNames).
+		WithOptions(*podNames).
 		WithFilter(false).
 		WithKeyConfirm(keys.Enter).
 		WithKeySelect(keys.Space).
@@ -148,16 +164,7 @@ func listPods(namespace string) {
 	// Show the interactive multiselect and get the selected options
 	selectedPods, _ := printer.Show()
 
-	if len(selectedPods) == 0 {
-		pterm.Error.Printfln("No pods selected")
-		return
-	}
-
-	for _, podName := range selectedPods {
-		var podList v1.PodList
-		podList.Items = append(podList.Items, podMap[podName])
-		getPodLogs(namespace, podList)
-	}
+	*podNames = selectedPods
 }
 
 // Get the default namespace specified in the KUBECONFIG file current context
@@ -190,19 +197,23 @@ func getPodLogs(namespace string, pods v1.PodList) {
 				Container: container.Name,
 			})
 
-			// save logs to file
+			// get logs
 			logs, err := req.Stream(context.Background())
 			if err != nil {
 				pterm.Error.Printfln("Error getting logs for container %s\n%v", container.Name, err)
+				containerTree := []pterm.TreeNode{{Text: pterm.Red(container.Name)}}
+				podTree.Children = append(podTree.Children, containerTree...)
+
 				break
 				//panic(err.Error())
 			}
 
-			fileLogs.Name = fmt.Sprintf("%s-%s.log", pod.Name, container.Name)
-			saveLog(logs)
-
+			// add container to the tree
 			containerTree := []pterm.TreeNode{{Text: container.Name}}
 			podTree.Children = append(podTree.Children, containerTree...)
+
+			fileLogs.Name = fmt.Sprintf("%s-%s.log", pod.Name, container.Name)
+			saveLog(logs)
 		}
 		pterm.DefaultTree.WithRoot(podTree).Render()
 	}
@@ -320,6 +331,7 @@ func init() {
 	customLogPath = rootCmd.Flags().StringP("logpath", "p", "", "Custom log path")
 	logReverse = rootCmd.Flags().BoolP("reverse", "r", false, "Write logs in reverse order (date descending)")
 	kubeconfig = rootCmd.Flags().String("kubeconfig", "", "(optional) Absolute path to the kubeconfig file")
+	allPods = rootCmd.Flags().BoolP("all", "a", false, "Get logs for all pods in the namespace")
 
 	if home := homedir.HomeDir(); home != "" && *kubeconfig == "" {
 		*kubeconfig = filepath.Join(home, ".kube", "config")

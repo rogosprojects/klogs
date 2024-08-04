@@ -36,14 +36,17 @@ go install github.com/rogosprojects/klogs@latest
 ```
 Usage:
   klogs [flags]
+```
 
-Flags:
-      --kubeconfig string [optional]   absolute path to the kubeconfig file
-  -p, --logpath string    [optional]  Custom log path
-  -n, --namespace string  [optional]  Select namespace
-  -l, --label stringArray [optional]  Select label (or labels with multiple -l flags)
-  -r, --reverse boolean   [optional]  Write logs in reverse order (date descending)
-````
+| Flag            | Type        | Description                                                   |
+|-----------------|-------------|---------------------------------------------------------------|
+| --kubeconfig    | string      | [optional] absolute path to the kubeconfig file               |
+| -p, --logpath   | string      | [default:logs] Custom log path                                |
+| -n, --namespace | string      | [default:current] Select namespace                            |
+| -l, --label     | stringArray | [optional] Select label (or labels with multiple -l flags)    |
+| -r, --reverse   | boolean     | [default:false] Write logs in reverse order (date descending) |
+| -a, --all       | boolean     | [default:false] Select all pods in namespace                  |
+
 
 * If no namespace is provided, the command will use the current context in the kubeconfig file.
 * If no label is provided, the command will list all pods in the namespace and prompt the user to select one.

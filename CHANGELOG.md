@@ -1,5 +1,9 @@
 # Changelog
 
+# v1.1.10
+
+Added "-a" option to get all logs in current namespace.
+
 # v1.1.9
 
 Added "-r" option to write logs in reverse order (date descending)
