@@ -197,7 +197,6 @@ func getPodLogs(namespace string, pods v1.PodList) {
 				break
 				//panic(err.Error())
 			}
-			defer logs.Close()
 
 			fileLogs.Name = fmt.Sprintf("%s-%s.log", pod.Name, container.Name)
 			saveLog(logs)
@@ -237,6 +236,13 @@ func findPodByLabel(namespace string, label string) {
 
 func saveLog(logs io.ReadCloser) {
 	anyLogFound = true
+
+	defer func(logs io.ReadCloser) {
+		err := logs.Close()
+		if err != nil {
+			panic(err.Error())
+		}
+	}(logs)
 
 	buf := new(bytes.Buffer)
 	_, err := io.Copy(buf, logs)
