@@ -1,12 +1,16 @@
 # Changelog
 
+# v1.1.11
+
+Added "--since" option to fetch logs newer than a relative duration. 
+
 # v1.1.10
 
-Added "-a" option to get all logs in current namespace.
+Added "--all" option to get all logs in current namespace.
 
 # v1.1.9
 
-Added "-r" option to write logs in reverse order (date descending)
+Added "--reverse" option to write logs in reverse order (date descending)
 
 # v1.1.6
 

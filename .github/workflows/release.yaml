@@ -10,6 +10,10 @@ jobs:
     name: Prepare release
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v3
+      name: "Refresh tags"
+      with:
+        fetch-tags: true
     - name: GitHub Create Tag Release
       uses: Roang-zero1/github-create-release-action@v3
       with:

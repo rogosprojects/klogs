@@ -29,9 +29,9 @@ var (
 	BuildVersion = "development"
 )
 var (
-	kubeconfig, namespace, customLogPath *string
-	client                               *kubernetes.Clientset
-	labels                               *[]string
+	kubeconfig, namespace, customLogPath, since *string
+	client                                      *kubernetes.Clientset
+	labels                                      *[]string
 )
 
 var (
@@ -185,17 +185,27 @@ func getCurrentNamespace(kubeconfig string) string {
 
 func getPodLogs(namespace string, pods v1.PodList) {
 
+	logOpts := &v1.PodLogOptions{}
+	if *since != "" {
+		// After
+		duration, err := time.ParseDuration(*since)
+		if err != nil {
+			panic(err.Error())
+		}
+		s := int64(duration.Seconds())
+		logOpts.SinceSeconds = &s
+	}
+
 	for _, pod := range pods.Items {
 		pterm.Success.Printfln("Found pod %s \n", pod.Name)
 		podTree := pterm.TreeNode{Text: pod.Name}
 
 		// print each container in the pod
 		for _, container := range pod.Spec.Containers {
-
 			// get logs for the container
-			req := client.CoreV1().Pods(namespace).GetLogs(pod.Name, &v1.PodLogOptions{
-				Container: container.Name,
-			})
+			logOpts.Container = container.Name
+			// get logs for the container
+			req := client.CoreV1().Pods(namespace).GetLogs(pod.Name, logOpts)
 
 			// get logs
 			logs, err := req.Stream(context.Background())
@@ -263,6 +273,7 @@ func saveLog(logs io.ReadCloser) {
 
 	// some logs could be empty
 	if buf.Len() == 0 {
+		pterm.Warning.Printfln("Empty logs for %s", fileLogs.Name)
 		return
 	}
 
@@ -332,6 +343,7 @@ func init() {
 	logReverse = rootCmd.Flags().BoolP("reverse", "r", false, "Write logs in reverse order (date descending)")
 	kubeconfig = rootCmd.Flags().String("kubeconfig", "", "(optional) Absolute path to the kubeconfig file")
 	allPods = rootCmd.Flags().BoolP("all", "a", false, "Get logs for all pods in the namespace")
+	since = rootCmd.Flags().StringP("since", "s", "", "Only return logs newer than a relative duration like 5s, 2m, or 3h. Defaults to all logs.")
 
 	if home := homedir.HomeDir(); home != "" && *kubeconfig == "" {
 		*kubeconfig = filepath.Join(home, ".kube", "config")

@@ -38,14 +38,15 @@ Usage:
   klogs [flags]
 ```
 
-| Flag            | Type        | Description                                                   |
-|-----------------|-------------|---------------------------------------------------------------|
-| --kubeconfig    | string      | [optional] absolute path to the kubeconfig file               |
-| -p, --logpath   | string      | [default:logs] Custom log path                                |
-| -n, --namespace | string      | [default:current] Select namespace                            |
-| -l, --label     | stringArray | [optional] Select label (or labels with multiple -l flags)    |
-| -r, --reverse   | boolean     | [default:false] Write logs in reverse order (date descending) |
-| -a, --all       | boolean     | [default:false] Select all pods in namespace                  |
+| Flag            | Type        | Description                                                                         |
+|-----------------|-------------|-------------------------------------------------------------------------------------|
+| --kubeconfig    | string      | [optional] absolute path to the kubeconfig file                                     |
+| -p, --logpath   | string      | [default:logs] Custom log path                                                      |
+| -n, --namespace | string      | [default:current] Select namespace                                                  |
+| -l, --label     | stringArray | [optional] Select label (or labels with multiple -l flags)                          |
+| -r, --reverse   | boolean     | [default:false] Write logs in reverse order (date descending)                       |
+| -a, --all       | boolean     | [default:false] Select all pods in namespace                                        |
+| -s, --since     | string      | [optional] Only return logs newer than a relative duration. Examples: 1m, 2h, 2h45m |
 
 
 * If no namespace is provided, the command will use the current context in the kubeconfig file.
