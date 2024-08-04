@@ -24,21 +24,26 @@ import (
 	"k8s.io/client-go/util/homedir"
 )
 
-// BuildVersion is the version of the build, passed in by the build system
-var BuildVersion = "development"
+var (
+	// BuildVersion is the version of the build, passed in by the build system
+	BuildVersion = "development"
+)
+var (
+	kubeconfig, namespace, customLogPath *string
+	client                               *kubernetes.Clientset
+	labels                               *[]string
+)
 
-var kubeconfig, namespace, customLogPath *string
-var client *kubernetes.Clientset
-var labels *[]string
-var logReverse *bool
-var anyLogFound = false
+var (
+	fileLogs    = fileLog{Path: "logs/" + time.Now().Format("2006-01-02T15:04")}
+	logReverse  *bool
+	anyLogFound = false
+)
 
 type fileLog struct {
 	Name string
 	Path string
 }
-
-var fileLogs = fileLog{Path: "logs/" + time.Now().Format("2006-01-02T15:04")}
 
 func splashScreen() {
 
@@ -269,12 +274,10 @@ func saveLog(logs io.ReadCloser) {
 var rootCmd = &cobra.Command{
 	Use:   "klogs",
 	Short: "Get logs from pods with a specific label",
-	Long: `
-Get logs from pods with a specific label in a namespace and save them to a file.
-Usage: klogs -n <namespace> -l <label>.
+	Long: `Get logs from pods with a specific label in a namespace and save them to a file.
 If no namespace is provided, the command will use the current context in the kubeconfig file.
 If no label is provided, the command will list all pods in the namespace and prompt the user to select one. Collect all the logs even if the pod has multiple containers.
-If logpath is provided, the logs will be saved to that path instead of the default logs/ directory.`,
+If no log path is provided, the logs will be saved in the "logs/datetime" directory in the current working directory.`,
 
 	Run: func(cmd *cobra.Command, args []string) {
 
@@ -310,10 +313,11 @@ func init() {
 	labels = rootCmd.Flags().StringArrayP("label", "l", []string{}, "Select label")
 	customLogPath = rootCmd.Flags().StringP("logpath", "p", "", "Custom log path")
 	logReverse = rootCmd.Flags().BoolP("reverse", "r", false, "Write logs in reverse order (date descending)")
+	kubeconfig = rootCmd.Flags().String("kubeconfig", "", "(optional) Absolute path to the kubeconfig file")
 
-	if home := homedir.HomeDir(); home != "" {
-		kubeconfig = rootCmd.Flags().String("kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
+	if home := homedir.HomeDir(); home != "" && *kubeconfig == "" {
+		*kubeconfig = filepath.Join(home, ".kube", "config")
 	} else {
-		kubeconfig = rootCmd.Flags().String("kubeconfig", "", "absolute path to the kubeconfig file")
+		pterm.Fatal.Printfln("Kubeconfig not found, please provide a kubeconfig file with --kubeconfig")
 	}
 }
