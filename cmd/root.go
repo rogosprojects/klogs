@@ -299,6 +299,11 @@ func saveLog(logs io.ReadCloser) {
 		}
 	}(logFile)
 
+	// Write the first byte that was read as a test
+	if _, err := logFile.Write(bufTest); err != nil {
+		panic(err.Error())
+	}
+
 	// Read and write logs in chunks
 	buf := make([]byte, 4096) // 4KB chunks
 	for {
