@@ -4,6 +4,7 @@ Package cmd is the entry point for the command line tool. It defines the root co
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -288,6 +289,7 @@ func saveLog(logs io.ReadCloser) {
 	}
 	logFilePath := filepath.Join(fileLogs.Path, fileLogs.Name)
 	logFile, err := os.Create(logFilePath)
+
 	if err != nil {
 		panic(err.Error())
 	}
@@ -303,17 +305,19 @@ func saveLog(logs io.ReadCloser) {
 		panic(err.Error())
 	}
 
-	// Read and write logs in chunks
-	buf := make([]byte, 4096) // 4KB chunks
+	reader := bufio.NewReader(logs)
+	data := make([]byte, 100)
 	for {
-		n, err := logs.Read(buf)
-		if err != nil && err != io.EOF {
-			panic(err.Error())
-		}
-		if n == 0 {
+		n, err := reader.Read(data)
+		if err == io.EOF {
 			break
 		}
-		if _, err := logFile.Write(buf[:n]); err != nil {
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		// Write the data to the file
+		if _, err := logFile.Write(data[:n]); err != nil {
 			panic(err.Error())
 		}
 	}
