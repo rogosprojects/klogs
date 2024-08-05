@@ -32,6 +32,7 @@ go install github.com/rogosprojects/klogs@latest
 ```
 
 ## Usage
+![Select Pods](/assets/klogs-select-pods.png)
 
 ```
 Usage:
@@ -44,12 +45,10 @@ Usage:
 | -p, --logpath   | string      | [default:logs] Custom log path                                                      |
 | -n, --namespace | string      | [default:current] Select namespace                                                  |
 | -l, --label     | stringArray | [optional] Select label (or labels with multiple -l flags)                          |
-| -r, --reverse   | boolean     | [default:false] Write logs in reverse order (date descending)                       |
 | -a, --all       | boolean     | [default:false] Select all pods in namespace                                        |
 | -s, --since     | string      | [optional] Only return logs newer than a relative duration. Examples: 1m, 2h, 2h45m |
 | -t, --tail      | int         | [optional] Number of lines to show from the end of the logs                         |
 
-![Select Pods](/assets/klogs-select-pods.png)
 
 ## Features
 
@@ -61,7 +60,6 @@ Usage:
 
 
 * **Custom Log Path**: If no log path is provided, the logs will be saved in the "logs" directory in the current working directory.
-* **Reverse Log Order**: If the "reverse" flag is set, the logs will be saved in reverse order.
 * **All Pods Logging**: If the "all" flag is set, the logs will be saved for all pods in the namespace.
 
 
@@ -76,7 +74,7 @@ Usage:
 * **Tail Log Lines**: If the "tail" flag is set, only the specified number of lines will be saved.
 
 ***Example:***
-  `klogs -n my-namespace -l app=my-app -p /path/to/logs -r -s 5m -t 100`
+  `klogs -n my-namespace -l app=my-app -p /path/to/logs -s 5m -t 100`
 
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.

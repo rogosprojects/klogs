@@ -4,7 +4,7 @@ Package cmd is the entry point for the command line tool. It defines the root co
 package cmd
 
 import (
-	"bytes"
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -36,9 +36,9 @@ var (
 )
 
 var (
-	fileLogs            = fileLog{Path: "logs/" + time.Now().Format("2006-01-02T15:04")}
-	logReverse, allPods *bool
-	anyLogFound         bool
+	fileLogs    = fileLog{Path: "logs/" + time.Now().Format("2006-01-02T15:04")}
+	allPods     *bool
+	anyLogFound bool
 )
 
 type fileLog struct {
@@ -271,38 +271,57 @@ func saveLog(logs io.ReadCloser) {
 		}
 	}(logs)
 
-	buf := new(bytes.Buffer)
-	_, err := io.Copy(buf, logs)
-	if err != nil {
+	// Test if logs is empty
+	bufTest := make([]byte, 1)
+	n, err := logs.Read(bufTest)
+	if err != nil && err != io.EOF {
 		panic(err.Error())
 	}
-
-	// some logs could be empty
-	if buf.Len() == 0 {
+	if n == 0 {
+		// some logs could be empty
 		pterm.Warning.Printfln("Empty logs for %s", fileLogs.Name)
 		return
 	}
 
-	bufBytes := buf.Bytes()
-
-	if *logReverse {
-		// Split the buffer into lines and reverse the order
-		lines := bytes.Split(bufBytes, []byte("\n"))
-		for i, j := 0, len(lines)-1; i < j; i, j = i+1, j-1 {
-			lines[i], lines[j] = lines[j], lines[i]
-		}
-
-		// Join the reversed lines back into a single byte slice
-		bufBytes = bytes.Join(lines, []byte("\n"))
-	}
-
+	// Create the log file
 	if err := os.MkdirAll(fileLogs.Path, 0755); err != nil {
 		panic(err.Error())
 	}
-	err = os.WriteFile(fileLogs.Path+"/"+fileLogs.Name, bufBytes, 0644)
+	logFilePath := filepath.Join(fileLogs.Path, fileLogs.Name)
+	logFile, err := os.Create(logFilePath)
+
 	if err != nil {
 		panic(err.Error())
 	}
+	defer func(logFile *os.File) {
+		err := logFile.Close()
+		if err != nil {
+			panic(err.Error())
+		}
+	}(logFile)
+
+	// Write the first byte that was read as a test
+	if _, err := logFile.Write(bufTest); err != nil {
+		panic(err.Error())
+	}
+
+	reader := bufio.NewReader(logs)
+	data := make([]byte, 100)
+	for {
+		n, err := reader.Read(data)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		// Write the data to the file
+		if _, err := logFile.Write(data[:n]); err != nil {
+			panic(err.Error())
+		}
+	}
+
 }
 
 var rootCmd = &cobra.Command{
@@ -344,7 +363,6 @@ func init() {
 	namespace = rootCmd.Flags().StringP("namespace", "n", "", "Select namespace")
 	labels = rootCmd.Flags().StringArrayP("label", "l", []string{}, "Select label")
 	customLogPath = rootCmd.Flags().StringP("logpath", "p", "", "Custom log path")
-	logReverse = rootCmd.Flags().BoolP("reverse", "r", false, "Write logs in reverse order (date descending)")
 	kubeconfig = rootCmd.Flags().String("kubeconfig", "", "(optional) Absolute path to the kubeconfig file")
 	allPods = rootCmd.Flags().BoolP("all", "a", false, "Get logs for all pods in the namespace")
 	since = rootCmd.Flags().StringP("since", "s", "", "Only return logs newer than a relative duration like 5s, 2m, or 3h. Defaults to all logs.")
