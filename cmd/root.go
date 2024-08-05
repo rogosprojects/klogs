@@ -4,12 +4,12 @@ Package cmd is the entry point for the command line tool. It defines the root co
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"atomicgo.dev/keyboard/keys"
@@ -186,7 +186,7 @@ func getCurrentNamespace(kubeconfig string) string {
 
 func getPodLogs(namespace string, pods v1.PodList) {
 
-	logOpts := &v1.PodLogOptions{}
+	logOpts := &v1.PodLogOptions{Timestamps: false}
 	// Since
 	if *since != "" {
 		// After
@@ -334,11 +334,18 @@ func reverseLogFileInChunks(filePath string) {
 	defer func(file *os.File) {
 		err := file.Close()
 		if err != nil {
-			panic(err.Error())
+
 		}
 	}(file)
 
-	// Read the entire file into memory in chunks
+	// Define the timestamp pattern
+	timestampPattern := `\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{3}`
+	//timestampPattern := `\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{9}Z`
+
+	// Compile the regex
+	re := regexp.MustCompile(timestampPattern)
+
+	// Read the file content in chunks and find log entries
 	var content []byte
 	buf := make([]byte, 4096) // 4KB chunks
 	for {
@@ -352,16 +359,21 @@ func reverseLogFileInChunks(filePath string) {
 		content = append(content, buf[:n]...)
 	}
 
-	// Split the content into lines and reverse the order
-	lines := bytes.Split(content, []byte("\n"))
-	for i, j := 0, len(lines)-1; i < j; i, j = i+1, j-1 {
-		lines[i], lines[j] = lines[j], lines[i]
+	// Find all log entries based on the timestamp pattern
+	logEntries := re.FindAllIndex(content, -1)
+
+	// Reverse the order of the log entries
+	var reversedContent []byte
+	for i := len(logEntries) - 1; i >= 0; i-- {
+		start := logEntries[i][0]
+		end := len(content)
+		if i < len(logEntries)-1 {
+			end = logEntries[i+1][0]
+		}
+		reversedContent = append(reversedContent, content[start:end]...)
 	}
 
-	// Join the reversed lines back into a single byte slice
-	reversedContent := bytes.Join(lines, []byte("\n"))
-
-	// Write the reversed content back to the file in chunks
+	// Write the reversed log entries back to the file in chunks
 	err = os.WriteFile(filePath, reversedContent, 0644)
 	if err != nil {
 		panic(err.Error())
