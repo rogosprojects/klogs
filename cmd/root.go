@@ -4,7 +4,6 @@ Package cmd is the entry point for the command line tool. It defines the root co
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -36,9 +35,9 @@ var (
 )
 
 var (
-	fileLogs            = fileLog{Path: "logs/" + time.Now().Format("2006-01-02T15:04")}
-	logReverse, allPods *bool
-	anyLogFound         bool
+	fileLogs    = fileLog{Path: "logs/" + time.Now().Format("2006-01-02T15:04")}
+	allPods     *bool
+	anyLogFound bool
 )
 
 type fileLog struct {
@@ -319,53 +318,6 @@ func saveLog(logs io.ReadCloser) {
 		}
 	}
 
-	// If logReverse is enabled, reverse the lines in the file
-	if *logReverse {
-		reverseLogFileInChunks(logFilePath)
-	}
-}
-
-func reverseLogFileInChunks(filePath string) {
-	// Open the file for reading
-	file, err := os.Open(filePath)
-	if err != nil {
-		panic(err.Error())
-	}
-	defer func(file *os.File) {
-		err := file.Close()
-		if err != nil {
-			panic(err.Error())
-		}
-	}(file)
-
-	// Read the entire file into memory in chunks
-	var content []byte
-	buf := make([]byte, 4096) // 4KB chunks
-	for {
-		n, err := file.Read(buf)
-		if err != nil && err != io.EOF {
-			panic(err.Error())
-		}
-		if n == 0 {
-			break
-		}
-		content = append(content, buf[:n]...)
-	}
-
-	// Split the content into lines and reverse the order
-	lines := bytes.Split(content, []byte("\n"))
-	for i, j := 0, len(lines)-1; i < j; i, j = i+1, j-1 {
-		lines[i], lines[j] = lines[j], lines[i]
-	}
-
-	// Join the reversed lines back into a single byte slice
-	reversedContent := bytes.Join(lines, []byte("\n"))
-
-	// Write the reversed content back to the file in chunks
-	err = os.WriteFile(filePath, reversedContent, 0644)
-	if err != nil {
-		panic(err.Error())
-	}
 }
 
 var rootCmd = &cobra.Command{
@@ -407,7 +359,6 @@ func init() {
 	namespace = rootCmd.Flags().StringP("namespace", "n", "", "Select namespace")
 	labels = rootCmd.Flags().StringArrayP("label", "l", []string{}, "Select label")
 	customLogPath = rootCmd.Flags().StringP("logpath", "p", "", "Custom log path")
-	logReverse = rootCmd.Flags().BoolP("reverse", "r", false, "Write logs in reverse order (date descending)")
 	kubeconfig = rootCmd.Flags().String("kubeconfig", "", "(optional) Absolute path to the kubeconfig file")
 	allPods = rootCmd.Flags().BoolP("all", "a", false, "Get logs for all pods in the namespace")
 	since = rootCmd.Flags().StringP("since", "s", "", "Only return logs newer than a relative duration like 5s, 2m, or 3h. Defaults to all logs.")
