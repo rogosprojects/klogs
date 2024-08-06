@@ -30,23 +30,19 @@ var (
 	BuildVersion = "development"
 )
 var (
-	kubeconfig, namespace, customLogPath, since *string
-	client                                      *kubernetes.Clientset
-	labels                                      *[]string
-	tail                                        *int64
+	kubeconfig, namespace, since, logPath *string
+	client                                *kubernetes.Clientset
+	labels                                *[]string
+	tail                                  *int64
 )
 
 var (
-	fileLogs    = fileLog{Path: "logs/" + time.Now().Format("2006-01-02T15:04")}
-	allPods     *bool
-	anyLogFound bool
+	allPods        *bool
+	anyLogFound    bool
+	defaultLogPath = "logs/" + time.Now().Format("2006-01-02T15:04")
 )
 
-type fileLog struct {
-	Name string
-	Path string
-}
-
+// splashScreen prints the splash screen!
 func splashScreen() {
 
 	pterm.DefaultBigText.WithLetters(
@@ -55,12 +51,6 @@ func splashScreen() {
 		Render() // Render the big text to the terminal
 
 	pterm.DefaultParagraph.Printfln("Version: %s", BuildVersion)
-}
-
-func configLogPath() {
-	if *customLogPath != "" {
-		fileLogs.Path = *customLogPath
-	}
 }
 
 func configClient() {
@@ -188,15 +178,19 @@ func getCurrentNamespace(kubeconfig string) string {
 func getPodLogs(namespace string, pods v1.PodList) {
 
 	var wg sync.WaitGroup
-	var podsTree []pterm.TreeNode
-	for _, pod := range pods.Items {
-		podTree := pterm.TreeNode{Text: pod.Name}
 
-		// print each container in the pod
-		for _, container := range pod.Spec.Containers {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+	for _, pod := range pods.Items {
+
+		podTree := pterm.TreeNode{Text: pod.Name}
+		var containerTree []pterm.TreeNode
+
+		wg.Add(1)
+		go func(podTree pterm.TreeNode) {
+			defer wg.Done()
+
+			// print each container in the pod
+			for _, container := range pod.Spec.Containers {
+
 				logOpts := &v1.PodLogOptions{}
 				// Since
 				if *since != "" {
@@ -222,29 +216,23 @@ func getPodLogs(namespace string, pods v1.PodList) {
 				logs, err := req.Stream(context.Background())
 				if err != nil {
 					pterm.Error.Printfln("Error getting logs for container %s\n%v", container.Name, err)
-					containerTree := []pterm.TreeNode{{Text: pterm.Red(container.Name)}}
-					podTree.Children = append(podTree.Children, containerTree...)
+					containerTree = append(containerTree, pterm.TreeNode{Text: pterm.Red(container.Name)})
 					return
-					//panic(err.Error())
 				}
 
 				// add container to the tree
-				containerTree := []pterm.TreeNode{{Text: container.Name}}
-				podTree.Children = append(podTree.Children, containerTree...)
+				containerTree = append(containerTree, pterm.TreeNode{Text: container.Name})
+				// save logs to file
+				saveLog(logs, fmt.Sprintf("%s-%s.log", pod.Name, container.Name))
+				podTree.Children = containerTree
+			}
+			pterm.Success.Printf("Found Pod %s \n", podTree.Text)
+			pterm.DefaultTree.WithRoot(podTree).Render()
+		}(podTree)
 
-				fileLogs.Name = fmt.Sprintf("%s-%s.log", pod.Name, container.Name)
-				saveLog(logs)
-				podsTree = append(podsTree, podTree)
-			}()
-
-		}
 	}
 	wg.Wait()
 
-	for _, podTree := range podsTree {
-		pterm.Success.Printf("Found Pod %s \n", podTree.Text)
-		pterm.DefaultTree.WithRoot(podTree).Render()
-	}
 }
 
 func findPodByLabel(namespace string, label string) {
@@ -273,7 +261,7 @@ func findPodByLabel(namespace string, label string) {
 	spinner1.Stop()
 }
 
-func saveLog(logs io.ReadCloser) {
+func saveLog(logs io.ReadCloser, logName string) {
 	anyLogFound = true
 
 	defer func(logs io.ReadCloser) {
@@ -291,15 +279,15 @@ func saveLog(logs io.ReadCloser) {
 	}
 	if n == 0 {
 		// some logs could be empty
-		pterm.Warning.Printfln("Empty logs for %s", fileLogs.Name)
+		pterm.Warning.Printfln("Empty logs for %s", logName)
 		return
 	}
 
 	// Create the log file
-	if err := os.MkdirAll(fileLogs.Path, 0755); err != nil {
+	if err := os.MkdirAll(*logPath, 0755); err != nil {
 		panic(err.Error())
 	}
-	logFilePath := filepath.Join(fileLogs.Path, fileLogs.Name)
+	logFilePath := filepath.Join(*logPath, logName)
 	logFile, err := os.Create(logFilePath)
 
 	if err != nil {
@@ -345,7 +333,6 @@ It is designed to be fast and efficient, and can get logs from multiple Pods/Con
 	Run: func(cmd *cobra.Command, args []string) {
 
 		splashScreen()
-		configLogPath()
 		configClient()
 		configNamespace()
 
@@ -358,7 +345,7 @@ It is designed to be fast and efficient, and can get logs from multiple Pods/Con
 		}
 
 		if anyLogFound {
-			pterm.Info.Printfln("Logs saved to %s", fileLogs.Path)
+			pterm.Info.Printfln("Logs saved to %s", logPath)
 		}
 	},
 }
@@ -374,7 +361,7 @@ func Execute() {
 func init() {
 	namespace = rootCmd.Flags().StringP("namespace", "n", "", "Select namespace")
 	labels = rootCmd.Flags().StringArrayP("label", "l", []string{}, "Select label")
-	customLogPath = rootCmd.Flags().StringP("logpath", "p", "", "Custom log path")
+	logPath = rootCmd.Flags().StringP("logpath", "p", defaultLogPath, "Custom log path")
 	kubeconfig = rootCmd.Flags().String("kubeconfig", "", "(optional) Absolute path to the kubeconfig file")
 	allPods = rootCmd.Flags().BoolP("all", "a", false, "Get logs for all pods in the namespace")
 	since = rootCmd.Flags().StringP("since", "s", "", "Only return logs newer than a relative duration like 5s, 2m, or 3h. Defaults to all logs.")
