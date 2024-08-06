@@ -20,7 +20,7 @@ Kubernetes log extractor written in GO. Blazing fast. 🔥
 
 ### From binaries
 
-Simply download [latest binaries](https://github.com/rogosprojects/klogs/releases/latest/download/klogs).
+Simply download [latest binaries](https://github.com/rogosprojects/klogs/releases/latest).
 
 ### From sources
 
