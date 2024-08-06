@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"atomicgo.dev/keyboard/keys"
@@ -39,6 +40,7 @@ var (
 	fileLogs    = fileLog{Path: "logs/" + time.Now().Format("2006-01-02T15:04")}
 	allPods     *bool
 	anyLogFound bool
+	wg          sync.WaitGroup
 )
 
 type fileLog struct {
@@ -236,6 +238,7 @@ func getPodLogs(namespace string, pods v1.PodList) {
 }
 
 func findPodByLabel(namespace string, label string) {
+	defer wg.Done()
 
 	pterm.Info.Printfln("Getting pods in namespace %s with label %s\n\n", pterm.Green(namespace), pterm.Green(label))
 	spinner1, _ := pterm.DefaultSpinner.Start()
@@ -342,8 +345,11 @@ It is designed to be fast and efficient, and can get logs from multiple Pods/Con
 		}
 
 		for _, l := range *labels {
-			findPodByLabel(*namespace, l)
+			wg.Add(1)
+
+			go findPodByLabel(*namespace, l)
 		}
+		wg.Wait()
 
 		if anyLogFound {
 			pterm.Info.Printfln("Logs saved to %s", fileLogs.Path)
