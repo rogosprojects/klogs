@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"atomicgo.dev/keyboard/keys"
@@ -202,41 +203,48 @@ func getPodLogs(namespace string, pods v1.PodList) {
 		logOpts.TailLines = tail
 	}
 
+	var wg sync.WaitGroup
 	for _, pod := range pods.Items {
-		pterm.Success.Printfln("Found pod %s \n", pod.Name)
+		pterm.Success.Printf("Found Pod %s \n", pod.Name)
 		podTree := pterm.TreeNode{Text: pod.Name}
 
 		// print each container in the pod
 		for _, container := range pod.Spec.Containers {
-			// get logs for the container
-			logOpts.Container = container.Name
-			// get logs for the container
-			req := client.CoreV1().Pods(namespace).GetLogs(pod.Name, logOpts)
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				// get logs for the container
+				logOpts.Container = container.Name
+				// get logs for the container
+				req := client.CoreV1().Pods(namespace).GetLogs(pod.Name, logOpts)
 
-			// get logs
-			logs, err := req.Stream(context.Background())
-			if err != nil {
-				pterm.Error.Printfln("Error getting logs for container %s\n%v", container.Name, err)
-				containerTree := []pterm.TreeNode{{Text: pterm.Red(container.Name)}}
+				// get logs
+				logs, err := req.Stream(context.Background())
+				if err != nil {
+					pterm.Error.Printfln("Error getting logs for container %s\n%v", container.Name, err)
+					containerTree := []pterm.TreeNode{{Text: pterm.Red(container.Name)}}
+					podTree.Children = append(podTree.Children, containerTree...)
+					return
+					//panic(err.Error())
+				}
+
+				// add container to the tree
+				containerTree := []pterm.TreeNode{{Text: container.Name}}
 				podTree.Children = append(podTree.Children, containerTree...)
 
-				break
-				//panic(err.Error())
-			}
-
-			// add container to the tree
-			containerTree := []pterm.TreeNode{{Text: container.Name}}
-			podTree.Children = append(podTree.Children, containerTree...)
-
-			fileLogs.Name = fmt.Sprintf("%s-%s.log", pod.Name, container.Name)
-			saveLog(logs)
+				fileLogs.Name = fmt.Sprintf("%s-%s.log", pod.Name, container.Name)
+				saveLog(logs)
+			}()
 		}
-		pterm.DefaultTree.WithRoot(podTree).Render()
+		err := pterm.DefaultTree.WithRoot(podTree).Render()
+		if err != nil {
+			pterm.Error.Printfln("Error rendering tree: %v", err)
+		}
 	}
+	wg.Wait()
 }
 
 func findPodByLabel(namespace string, label string) {
-
 	pterm.Info.Printfln("Getting pods in namespace %s with label %s\n\n", pterm.Green(namespace), pterm.Green(label))
 	spinner1, _ := pterm.DefaultSpinner.Start()
 
@@ -257,6 +265,7 @@ func findPodByLabel(namespace string, label string) {
 		spinner1.Stop()
 		return
 	}
+
 	getPodLogs(namespace, *pods)
 	spinner1.Stop()
 }
