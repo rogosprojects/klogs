@@ -1,5 +1,9 @@
 # Changelog
 
+## v1.1.13
+
+Support for parallel log fetching. Fetch logs from multiple pods/containers simultaneously. This enhances efficiency when dealing with large-scale deployments.
+
 ## v1.1.12
 
 Faster. 🔥 Use "bufio" to read logs in chunks instead of line by line. This is especially useful when reading large logs. Removed the "--reverse" option as it is just overhead now.
