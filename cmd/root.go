@@ -203,11 +203,11 @@ func getPodLogs(namespace string, pods v1.PodList) {
 		logOpts.TailLines = tail
 	}
 
+	var wg sync.WaitGroup
 	for _, pod := range pods.Items {
 		pterm.Success.Printf("Found Pod %s \n", pod.Name)
 		podTree := pterm.TreeNode{Text: pod.Name}
 
-		var wg sync.WaitGroup
 		// print each container in the pod
 		for _, container := range pod.Spec.Containers {
 			wg.Add(1)
@@ -236,14 +236,12 @@ func getPodLogs(namespace string, pods v1.PodList) {
 				saveLog(logs)
 			}()
 		}
-		wg.Wait()
-
 		err := pterm.DefaultTree.WithRoot(podTree).Render()
 		if err != nil {
 			pterm.Error.Printfln("Error rendering tree: %v", err)
 		}
-
 	}
+	wg.Wait()
 }
 
 func findPodByLabel(namespace string, label string) {
