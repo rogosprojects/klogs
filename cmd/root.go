@@ -40,7 +40,6 @@ var (
 	fileLogs    = fileLog{Path: "logs/" + time.Now().Format("2006-01-02T15:04")}
 	allPods     *bool
 	anyLogFound bool
-	wg          sync.WaitGroup
 )
 
 type fileLog struct {
@@ -208,6 +207,7 @@ func getPodLogs(namespace string, pods v1.PodList) {
 		pterm.Success.Printf("Found Pod %s \n", pod.Name)
 		podTree := pterm.TreeNode{Text: pod.Name}
 
+		var wg sync.WaitGroup
 		// print each container in the pod
 		for _, container := range pod.Spec.Containers {
 			wg.Add(1)
