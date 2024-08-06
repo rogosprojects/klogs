@@ -38,6 +38,7 @@ var (
 var (
 	fileLogs    = fileLog{Path: "logs/" + time.Now().Format("2006-01-02T15:04")}
 	allPods     *bool
+	follow      *bool
 	anyLogFound bool
 )
 
@@ -187,6 +188,8 @@ func getCurrentNamespace(kubeconfig string) string {
 func getPodLogs(namespace string, pods v1.PodList) {
 
 	logOpts := &v1.PodLogOptions{}
+	logOpts.Follow = *follow
+
 	// Since
 	if *since != "" {
 		// After
@@ -367,6 +370,7 @@ func init() {
 	allPods = rootCmd.Flags().BoolP("all", "a", false, "Get logs for all pods in the namespace")
 	since = rootCmd.Flags().StringP("since", "s", "", "Only return logs newer than a relative duration like 5s, 2m, or 3h. Defaults to all logs.")
 	tail = rootCmd.Flags().Int64P("tail", "t", -1, "Lines of the most recent log to save")
+	follow = rootCmd.Flags().BoolP("follow", "f", false, "Follow logs until pods die")
 
 	if home := homedir.HomeDir(); home != "" && *kubeconfig == "" {
 		*kubeconfig = filepath.Join(home, ".kube", "config")
