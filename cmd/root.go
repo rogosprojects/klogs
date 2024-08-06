@@ -205,13 +205,14 @@ func getPodLogs(namespace string, pods v1.PodList) {
 	}
 
 	for _, pod := range pods.Items {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			podTree := pterm.TreeNode{Text: pod.Name}
+		pterm.Success.Printf("Found Pod %s \n", pod.Name)
+		podTree := pterm.TreeNode{Text: pod.Name}
 
-			// print each container in the pod
-			for _, container := range pod.Spec.Containers {
+		// print each container in the pod
+		for _, container := range pod.Spec.Containers {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
 				// get logs for the container
 				logOpts.Container = container.Name
 				// get logs for the container
@@ -223,8 +224,7 @@ func getPodLogs(namespace string, pods v1.PodList) {
 					pterm.Error.Printfln("Error getting logs for container %s\n%v", container.Name, err)
 					containerTree := []pterm.TreeNode{{Text: pterm.Red(container.Name)}}
 					podTree.Children = append(podTree.Children, containerTree...)
-
-					break
+					return
 					//panic(err.Error())
 				}
 
@@ -234,10 +234,9 @@ func getPodLogs(namespace string, pods v1.PodList) {
 
 				fileLogs.Name = fmt.Sprintf("%s-%s.log", pod.Name, container.Name)
 				saveLog(logs)
-			}
-			pterm.Success.Printf("Found Pod %s \n", pod.Name)
-			pterm.DefaultTree.WithRoot(podTree).Render()
-		}()
+			}()
+		}
+		pterm.DefaultTree.WithRoot(podTree).Render()
 	}
 }
 
@@ -348,7 +347,7 @@ It is designed to be fast and efficient, and can get logs from multiple Pods/Con
 		}
 
 		for _, l := range *labels {
-			go findPodByLabel(*namespace, l)
+			findPodByLabel(*namespace, l)
 		}
 		wg.Wait()
 
