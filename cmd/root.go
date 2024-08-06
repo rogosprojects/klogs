@@ -236,7 +236,13 @@ func getPodLogs(namespace string, pods v1.PodList) {
 				saveLog(logs)
 			}()
 		}
-		pterm.DefaultTree.WithRoot(podTree).Render()
+		wg.Wait()
+
+		err := pterm.DefaultTree.WithRoot(podTree).Render()
+		if err != nil {
+			pterm.Error.Printfln("Error rendering tree: %v", err)
+		}
+
 	}
 }
 
@@ -349,7 +355,6 @@ It is designed to be fast and efficient, and can get logs from multiple Pods/Con
 		for _, l := range *labels {
 			findPodByLabel(*namespace, l)
 		}
-		wg.Wait()
 
 		if anyLogFound {
 			pterm.Info.Printfln("Logs saved to %s", fileLogs.Path)
