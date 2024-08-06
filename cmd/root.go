@@ -205,41 +205,43 @@ func getPodLogs(namespace string, pods v1.PodList) {
 	}
 
 	for _, pod := range pods.Items {
-		pterm.Success.Printfln("Found pod %s \n", pod.Name)
-		podTree := pterm.TreeNode{Text: pod.Name}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			podTree := pterm.TreeNode{Text: pod.Name}
 
-		// print each container in the pod
-		for _, container := range pod.Spec.Containers {
-			// get logs for the container
-			logOpts.Container = container.Name
-			// get logs for the container
-			req := client.CoreV1().Pods(namespace).GetLogs(pod.Name, logOpts)
+			// print each container in the pod
+			for _, container := range pod.Spec.Containers {
+				// get logs for the container
+				logOpts.Container = container.Name
+				// get logs for the container
+				req := client.CoreV1().Pods(namespace).GetLogs(pod.Name, logOpts)
 
-			// get logs
-			logs, err := req.Stream(context.Background())
-			if err != nil {
-				pterm.Error.Printfln("Error getting logs for container %s\n%v", container.Name, err)
-				containerTree := []pterm.TreeNode{{Text: pterm.Red(container.Name)}}
+				// get logs
+				logs, err := req.Stream(context.Background())
+				if err != nil {
+					pterm.Error.Printfln("Error getting logs for container %s\n%v", container.Name, err)
+					containerTree := []pterm.TreeNode{{Text: pterm.Red(container.Name)}}
+					podTree.Children = append(podTree.Children, containerTree...)
+
+					break
+					//panic(err.Error())
+				}
+
+				// add container to the tree
+				containerTree := []pterm.TreeNode{{Text: container.Name}}
 				podTree.Children = append(podTree.Children, containerTree...)
 
-				break
-				//panic(err.Error())
+				fileLogs.Name = fmt.Sprintf("%s-%s.log", pod.Name, container.Name)
+				saveLog(logs)
 			}
-
-			// add container to the tree
-			containerTree := []pterm.TreeNode{{Text: container.Name}}
-			podTree.Children = append(podTree.Children, containerTree...)
-
-			fileLogs.Name = fmt.Sprintf("%s-%s.log", pod.Name, container.Name)
-			saveLog(logs)
-		}
-		pterm.DefaultTree.WithRoot(podTree).Render()
+			pterm.Success.Printf("Found Pod %s \n", pod.Name)
+			pterm.DefaultTree.WithRoot(podTree).Render()
+		}()
 	}
 }
 
 func findPodByLabel(namespace string, label string) {
-	defer wg.Done()
-
 	pterm.Info.Printfln("Getting pods in namespace %s with label %s\n\n", pterm.Green(namespace), pterm.Green(label))
 	spinner1, _ := pterm.DefaultSpinner.Start()
 
@@ -260,6 +262,7 @@ func findPodByLabel(namespace string, label string) {
 		spinner1.Stop()
 		return
 	}
+
 	getPodLogs(namespace, *pods)
 	spinner1.Stop()
 }
@@ -345,8 +348,6 @@ It is designed to be fast and efficient, and can get logs from multiple Pods/Con
 		}
 
 		for _, l := range *labels {
-			wg.Add(1)
-
 			go findPodByLabel(*namespace, l)
 		}
 		wg.Wait()
