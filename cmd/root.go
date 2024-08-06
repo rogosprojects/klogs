@@ -187,25 +187,9 @@ func getCurrentNamespace(kubeconfig string) string {
 
 func getPodLogs(namespace string, pods v1.PodList) {
 
-	logOpts := &v1.PodLogOptions{}
-	// Since
-	if *since != "" {
-		// After
-		duration, err := time.ParseDuration(*since)
-		if err != nil {
-			panic(err.Error())
-		}
-		s := int64(duration.Seconds())
-		logOpts.SinceSeconds = &s
-	}
-	// Tail
-	if *tail != -1 {
-		logOpts.TailLines = tail
-	}
-
 	var wg sync.WaitGroup
+	var podsTree []pterm.TreeNode
 	for _, pod := range pods.Items {
-		pterm.Success.Printf("Found Pod %s \n", pod.Name)
 		podTree := pterm.TreeNode{Text: pod.Name}
 
 		// print each container in the pod
@@ -213,6 +197,22 @@ func getPodLogs(namespace string, pods v1.PodList) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
+				logOpts := &v1.PodLogOptions{}
+				// Since
+				if *since != "" {
+					// After
+					duration, err := time.ParseDuration(*since)
+					if err != nil {
+						panic(err.Error())
+					}
+					s := int64(duration.Seconds())
+					logOpts.SinceSeconds = &s
+				}
+				// Tail
+				if *tail != -1 {
+					logOpts.TailLines = tail
+				}
+
 				// get logs for the container
 				logOpts.Container = container.Name
 				// get logs for the container
@@ -234,14 +234,17 @@ func getPodLogs(namespace string, pods v1.PodList) {
 
 				fileLogs.Name = fmt.Sprintf("%s-%s.log", pod.Name, container.Name)
 				saveLog(logs)
+				podsTree = append(podsTree, podTree)
 			}()
-		}
-		err := pterm.DefaultTree.WithRoot(podTree).Render()
-		if err != nil {
-			pterm.Error.Printfln("Error rendering tree: %v", err)
+
 		}
 	}
 	wg.Wait()
+
+	for _, podTree := range podsTree {
+		pterm.Success.Printf("Found Pod %s \n", podTree.Text)
+		pterm.DefaultTree.WithRoot(podTree).Render()
+	}
 }
 
 func findPodByLabel(namespace string, label string) {
