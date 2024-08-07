@@ -2,7 +2,7 @@
 
 ## v1.1.13
 
-Support for parallel log fetching. Fetch logs from multiple pods/containers simultaneously. This enhances efficiency when dealing with large-scale deployments.
+Support for parallel log fetching. Fetch logs from multiple pods/containers simultaneously. This enhances efficiency when dealing with large-scale deployments. Show log size.
 
 ## v1.1.12
 
