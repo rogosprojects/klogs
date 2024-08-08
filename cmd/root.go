@@ -46,10 +46,13 @@ var (
 // splashScreen prints the splash screen!
 func splashScreen() {
 
-	pterm.DefaultBigText.WithLetters(
+	err := pterm.DefaultBigText.WithLetters(
 		putils.LettersFromStringWithStyle("K", pterm.FgBlue.ToStyle()),
 		putils.LettersFromStringWithStyle("Logs", pterm.FgWhite.ToStyle())).
-		Render() // Render the big text to the terminal
+		Render()
+	if err != nil {
+		return
+	} // Render the big text to the terminal
 
 	pterm.DefaultParagraph.Printfln("Version: %s", BuildVersion)
 }
@@ -204,7 +207,12 @@ func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) {
 	var wg sync.WaitGroup
 
 	for _, pod := range pods.Items {
-		var _podTree = pterm.TreeNode{Text: pterm.Info.WithPrefix(pterm.Prefix{Text: "[Pod]", Style: pterm.Info.MessageStyle}).Sprintf(pod.Name)}
+		var _podTree = pterm.TreeNode{
+			Text: pterm.Info.
+				WithPrefix(pterm.Prefix{Text: "[Pod]", Style: pterm.Info.MessageStyle}).
+				WithMessageStyle(pterm.DefaultBasicText.Style).
+				Sprintf(pod.Name),
+		}
 		var containerTree []pterm.TreeNode
 
 		for _, container := range pod.Spec.Containers {
@@ -212,23 +220,33 @@ func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) {
 			_podTree.Children = containerTree
 
 			wg.Add(1)
-			go streamLog(pod, container, logOpts, &wg, _podTree)
+			go streamLog(pod, container, logOpts, &wg)
 		}
-		pterm.DefaultTree.WithRoot(_podTree).Render()
+		err := pterm.DefaultTree.WithRoot(_podTree).Render()
+		if err != nil {
+			return
+		}
 	}
 
 	var spinner *pterm.SpinnerPrinter
 	if *follow {
 		spinner, _ = pterm.DefaultSpinner.Start("Streaming logs...")
 	}
+	// wait for all goroutines to finish
 	wg.Wait()
 	close(chanContainers)
+
 	if *follow {
-		spinner.Stop()
+		if spinner != nil {
+			err := spinner.Stop()
+			if err != nil {
+				return
+			}
+		}
 	}
 }
 
-func streamLog(pod v1.Pod, container v1.Container, logOpts v1.PodLogOptions, wg *sync.WaitGroup, _podTree pterm.TreeNode) {
+func streamLog(pod v1.Pod, container v1.Container, logOpts v1.PodLogOptions, wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	logOpts.Container = container.Name
@@ -243,14 +261,20 @@ func streamLog(pod v1.Pod, container v1.Container, logOpts v1.PodLogOptions, wg 
 		return
 	}
 
-	wg.Add(1)
-	go saveLog(logs, pod.Name, container.Name, wg, _podTree)
+	written := writeLogToDisk(logs, pod.Name, container.Name)
+	s := pterm.Style{pterm.FgWhite, pterm.BgDefault, pterm.Bold, pterm.Italic}
+	pterm.Info.WithPrefix(
+		pterm.Prefix{
+			Text:  convertBytes(written),
+			Style: &s,
+		}).
+		WithMessageStyle(&s).
+		Printfln("%s/%s", pod.Name, container.Name)
 
 }
 
 func findPodByLabel(label string) v1.PodList {
-	pterm.Info.Printfln("Getting pods in namespace %s with label %s\n\n", pterm.Green(*namespace), pterm.Green(label))
-	//spinner1, _ := pterm.DefaultSpinner.Start()
+	pterm.Info.Printf("Getting Pods in namespace %s with label %s\n\n", pterm.Green(*namespace), pterm.Green(label))
 
 	pods, err := client.CoreV1().Pods(*namespace).List(context.TODO(), metav1.ListOptions{
 		LabelSelector: label,
@@ -266,17 +290,12 @@ func findPodByLabel(label string) v1.PodList {
 	// if pods are not found print message
 	if len(pods.Items) == 0 {
 		pterm.Error.Printfln("No pods found in namespace %s with label %s\n", *namespace, label)
-		//spinner1.Stop()
 	}
 
-	//getPodLogs(namespace, *pods)
-	//spinner1.Stop()
 	return *pods
-
 }
 
-func saveLog(logs io.ReadCloser, podName string, containerName string, wg *sync.WaitGroup, _podTree pterm.TreeNode) {
-	defer wg.Done()
+func writeLogToDisk(logs io.ReadCloser, podName string, containerName string) int {
 	anyLogFound = true
 
 	logName := fmt.Sprintf("%s-%s.log", podName, containerName)
@@ -297,7 +316,7 @@ func saveLog(logs io.ReadCloser, podName string, containerName string, wg *sync.
 	if n == 0 {
 		// some logs could be empty
 		pterm.Warning.Printfln("Empty logs for %s", logName)
-		return
+		return 0
 	}
 
 	// Create the log file
@@ -332,7 +351,7 @@ func saveLog(logs io.ReadCloser, podName string, containerName string, wg *sync.
 		}
 		if err != nil {
 			fmt.Println(err)
-			return
+			return 0
 		}
 		// Write the data to the file
 		w, err := logFile.Write(data[:n])
@@ -343,8 +362,7 @@ func saveLog(logs io.ReadCloser, podName string, containerName string, wg *sync.
 	}
 
 	// return the number of bytes written in kilobytes
-	pterm.Info.Printfln("%s %s", pterm.Gray(logName), pterm.Gray(convertBytes(written)))
-
+	return written
 }
 
 func convertBytes(bytes int) string {
