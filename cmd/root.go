@@ -202,8 +202,6 @@ func getLopOpts() v1.PodLogOptions {
 }
 
 func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) {
-	podListLen := len(pods.Items)
-	var chanContainers = make(chan int, podListLen*5)
 	var wg sync.WaitGroup
 	// Create a multi printer for managing multiple printers
 	multiPrinter := pterm.DefaultMultiPrinter
@@ -236,8 +234,6 @@ func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) {
 
 	// wait for all goroutines to finish
 	wg.Wait()
-	close(chanContainers)
-
 }
 
 func streamLog(pod v1.Pod, container v1.Container, logOpts v1.PodLogOptions, wg *sync.WaitGroup, multiPrinter *pterm.MultiPrinter) {
