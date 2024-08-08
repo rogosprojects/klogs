@@ -34,6 +34,7 @@ var (
 	client                                *kubernetes.Clientset
 	labels                                *[]string
 	tail                                  *int64
+	follow                                *bool
 )
 
 var (
@@ -191,50 +192,59 @@ func getLopOpts() v1.PodLogOptions {
 	if *tail != -1 {
 		logOpts.TailLines = tail
 	}
+	// Follow
+	logOpts.Follow = *follow
+
 	return logOpts
 }
-func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) {
 
+func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) {
+	podListLen := len(pods.Items)
+	var chanContainers = make(chan int, podListLen*5)
 	var wg sync.WaitGroup
 
 	for _, pod := range pods.Items {
+		var _podTree = pterm.TreeNode{Text: pterm.Info.WithPrefix(pterm.Prefix{Text: "[Pod]", Style: pterm.Info.MessageStyle}).Sprintf(pod.Name)}
+		var containerTree []pterm.TreeNode
 
-		wg.Add(1)
-		go func(_logOpts v1.PodLogOptions) {
-			var containerTree []pterm.TreeNode
-			var _podTree pterm.TreeNode
-			_podTree.Text = pod.Name
+		for _, container := range pod.Spec.Containers {
+			containerTree = append(containerTree, pterm.TreeNode{Text: container.Name})
+			_podTree.Children = containerTree
 
-			defer wg.Done()
-			// print each container in the pod
-			for _, container := range pod.Spec.Containers {
+			wg.Add(1)
+			go streamLog(pod, container, logOpts, &wg, _podTree)
+		}
+		pterm.DefaultTree.WithRoot(_podTree).Render()
+	}
 
-				// get logs for the container
-				_logOpts.Container = container.Name
-				// get logs for the container
-				req := client.CoreV1().Pods(*namespace).GetLogs(pod.Name, &_logOpts)
-
-				// get logs
-				logs, err := req.Stream(context.Background())
-				if err != nil {
-					pterm.Error.Printfln("Error getting logs for container %s\n%v", container.Name, err)
-					containerTree = append(containerTree, pterm.TreeNode{Text: pterm.Red(container.Name)})
-					return
-				}
-
-				// add container to the tree
-				// save logs to file
-				writtenBytes := saveLog(logs, fmt.Sprintf("%s-%s.log", pod.Name, container.Name))
-				containerTree = append(containerTree, pterm.TreeNode{Text: container.Name + convertBytes(writtenBytes)})
-				_podTree.Children = containerTree
-
-			}
-			pterm.Success.Printf("Found Pod %s \n", _podTree.Text)
-			pterm.DefaultTree.WithRoot(_podTree).Render()
-		}(logOpts)
-
+	var spinner *pterm.SpinnerPrinter
+	if *follow {
+		spinner, _ = pterm.DefaultSpinner.Start("Streaming logs...")
 	}
 	wg.Wait()
+	close(chanContainers)
+	if *follow {
+		spinner.Stop()
+	}
+}
+
+func streamLog(pod v1.Pod, container v1.Container, logOpts v1.PodLogOptions, wg *sync.WaitGroup, _podTree pterm.TreeNode) {
+	defer wg.Done()
+
+	logOpts.Container = container.Name
+	// get logs for the container
+	req := client.CoreV1().Pods(*namespace).GetLogs(pod.Name, &logOpts)
+
+	// get logs
+	logs, err := req.Stream(context.Background())
+	if err != nil {
+		pterm.Error.Printfln("Error getting logs for container %s\n%v", container.Name, err)
+		//containerTree = append(containerTree, pterm.TreeNode{Text: pterm.Red(container.Name)})
+		return
+	}
+
+	wg.Add(1)
+	go saveLog(logs, pod.Name, container.Name, wg, _podTree)
 
 }
 
@@ -265,8 +275,11 @@ func findPodByLabel(label string) v1.PodList {
 
 }
 
-func saveLog(logs io.ReadCloser, logName string) int {
+func saveLog(logs io.ReadCloser, podName string, containerName string, wg *sync.WaitGroup, _podTree pterm.TreeNode) {
+	defer wg.Done()
 	anyLogFound = true
+
+	logName := fmt.Sprintf("%s-%s.log", podName, containerName)
 
 	defer func(logs io.ReadCloser) {
 		err := logs.Close()
@@ -284,7 +297,7 @@ func saveLog(logs io.ReadCloser, logName string) int {
 	if n == 0 {
 		// some logs could be empty
 		pterm.Warning.Printfln("Empty logs for %s", logName)
-		return 0
+		return
 	}
 
 	// Create the log file
@@ -319,7 +332,7 @@ func saveLog(logs io.ReadCloser, logName string) int {
 		}
 		if err != nil {
 			fmt.Println(err)
-			return 0
+			return
 		}
 		// Write the data to the file
 		w, err := logFile.Write(data[:n])
@@ -330,7 +343,7 @@ func saveLog(logs io.ReadCloser, logName string) int {
 	}
 
 	// return the number of bytes written in kilobytes
-	return written
+	pterm.Info.Printfln("%s %s", pterm.Gray(logName), pterm.Gray(convertBytes(written)))
 
 }
 
@@ -355,9 +368,9 @@ It is designed to be fast and efficient, and can get logs from multiple Pods/Con
 
 	Run: func(cmd *cobra.Command, args []string) {
 		var podList v1.PodList
-		var logOpts = getLopOpts()
 
 		splashScreen()
+
 		configClient()
 		configNamespace()
 
@@ -369,7 +382,7 @@ It is designed to be fast and efficient, and can get logs from multiple Pods/Con
 			}
 		}
 
-		getPodLogs(podList, logOpts)
+		getPodLogs(podList, getLopOpts())
 
 		if anyLogFound {
 			pterm.Info.Printfln("Logs saved to %s", *logPath)
@@ -393,6 +406,7 @@ func init() {
 	allPods = rootCmd.Flags().BoolP("all", "a", false, "Get logs for all pods in the namespace")
 	since = rootCmd.Flags().StringP("since", "s", "", "Only return logs newer than a relative duration like 5s, 2m, or 3h. Defaults to all logs.")
 	tail = rootCmd.Flags().Int64P("tail", "t", -1, "Lines of the most recent log to save")
+	follow = rootCmd.Flags().BoolP("follow", "f", false, "Specify if the logs should be streamed")
 
 	if home := homedir.HomeDir(); home != "" && *kubeconfig == "" {
 		*kubeconfig = filepath.Join(home, ".kube", "config")
