@@ -15,6 +15,7 @@ Kubernetes log extractor written in GO. Blazing fast. 🔥
 - **Label Filtering**: Extract logs from pods matching specific labels.
 - **Multiple-Pods Log Download**: Supports downloading logs from multiple pods simultaneously, enhancing efficiency when dealing with large-scale deployments.
 - **Output Flexibility**: Saves logs to a specified directory or outputs to date-based folder.
+- **Follow Logs**: Stream logs in real-time for debugging and monitoring.
 
 ## Installation
 
@@ -48,6 +49,7 @@ Usage:
 | -a, --all       | boolean     | [default:false] Select all pods in namespace                                        |
 | -s, --since     | string      | [optional] Only return logs newer than a relative duration. Examples: 1m, 2h, 2h45m |
 | -t, --tail      | int         | [optional] Number of lines to show from the end of the logs                         |
+| -f, --follow    | boolean     | [default:false] Stream logs in real-time                                            |
 
 
 ## Features
@@ -75,6 +77,11 @@ Usage:
 
 ***Example:***
   `klogs -n my-namespace -l app=my-app -p /path/to/logs -s 5m -t 100`
+
+* **Follow Logs**: If the "follow" flag is set, the logs will be streamed in real-time.
+
+***Example:***
+  `klogs -n my-namespace -l app=my-app -f`
 
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
