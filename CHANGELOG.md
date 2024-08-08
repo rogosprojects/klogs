@@ -1,5 +1,7 @@
 # Changelog
 
+## v1.1.14
+New feature: `--follow` option to stream logs in real-time. This is a game-changer for debugging and monitoring. Improved goroutines to fetch logs from multiple pods/containers simultaneously. Faster. 🔥
 ## v1.1.13
 
 Support for parallel log fetching. Fetch logs from multiple pods/containers simultaneously. This enhances efficiency when dealing with large-scale deployments. Show log size.
