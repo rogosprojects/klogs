@@ -205,6 +205,8 @@ func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) {
 	podListLen := len(pods.Items)
 	var chanContainers = make(chan int, podListLen*5)
 	var wg sync.WaitGroup
+	// Create a multi printer for managing multiple printers
+	multiPrinter := pterm.DefaultMultiPrinter
 
 	for _, pod := range pods.Items {
 		var _podTree = pterm.TreeNode{
@@ -220,33 +222,33 @@ func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) {
 			_podTree.Children = containerTree
 
 			wg.Add(1)
-			go streamLog(pod, container, logOpts, &wg)
+			go streamLog(pod, container, logOpts, &wg, &multiPrinter)
 		}
 		err := pterm.DefaultTree.WithRoot(_podTree).Render()
 		if err != nil {
 			return
 		}
 	}
-
-	var spinner *pterm.SpinnerPrinter
+	multiPrinter.Start()
+	/*var spinner *pterm.SpinnerPrinter
 	if *follow {
 		spinner, _ = pterm.DefaultSpinner.Start("Streaming logs...")
-	}
+	}*/
 	// wait for all goroutines to finish
 	wg.Wait()
 	close(chanContainers)
 
-	if *follow {
+	/*if *follow {
 		if spinner != nil {
 			err := spinner.Stop()
 			if err != nil {
 				return
 			}
 		}
-	}
+	}*/
 }
 
-func streamLog(pod v1.Pod, container v1.Container, logOpts v1.PodLogOptions, wg *sync.WaitGroup) {
+func streamLog(pod v1.Pod, container v1.Container, logOpts v1.PodLogOptions, wg *sync.WaitGroup, multiPrinter *pterm.MultiPrinter) {
 	defer wg.Done()
 
 	logOpts.Container = container.Name
@@ -261,15 +263,7 @@ func streamLog(pod v1.Pod, container v1.Container, logOpts v1.PodLogOptions, wg 
 		return
 	}
 
-	written := writeLogToDisk(logs, pod.Name, container.Name)
-	s := pterm.Style{pterm.FgWhite, pterm.BgDefault, pterm.Bold, pterm.Italic}
-	pterm.Info.WithPrefix(
-		pterm.Prefix{
-			Text:  convertBytes(written),
-			Style: &s,
-		}).
-		WithMessageStyle(&s).
-		Printfln("%s/%s", pod.Name, container.Name)
+	writeLogToDisk(logs, pod.Name, container.Name, multiPrinter)
 
 }
 
@@ -295,7 +289,7 @@ func findPodByLabel(label string) v1.PodList {
 	return *pods
 }
 
-func writeLogToDisk(logs io.ReadCloser, podName string, containerName string) int {
+func writeLogToDisk(logs io.ReadCloser, podName string, containerName string, multiPrinter *pterm.MultiPrinter) int {
 	anyLogFound = true
 
 	logName := fmt.Sprintf("%s-%s.log", podName, containerName)
@@ -340,6 +334,9 @@ func writeLogToDisk(logs io.ReadCloser, podName string, containerName string) in
 	if _, err := logFile.Write(bufTest); err != nil {
 		panic(err.Error())
 	}
+	spinner1, _ := pterm.DefaultSpinner.WithWriter(multiPrinter.NewWriter()).Start("Streaming logs...")
+	defer spinner1.Stop()
+
 	var written = 1
 
 	reader := bufio.NewReader(logs)
@@ -359,6 +356,15 @@ func writeLogToDisk(logs io.ReadCloser, podName string, containerName string) in
 			panic(err.Error())
 		}
 		written += w
+		s := pterm.Style{pterm.FgWhite, pterm.BgDefault, pterm.Bold, pterm.Italic}
+
+		spinner1.Text = pterm.Info.WithPrefix(
+			pterm.Prefix{
+				Text:  convertBytes(written),
+				Style: &s,
+			}).
+			WithMessageStyle(&s).
+			Sprintf("%s/%s", podName, containerName)
 	}
 
 	// return the number of bytes written in kilobytes
