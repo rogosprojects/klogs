@@ -207,6 +207,7 @@ func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) {
 	var wg sync.WaitGroup
 	// Create a multi printer for managing multiple printers
 	multiPrinter := pterm.DefaultMultiPrinter
+	multiPrinter.Start()
 
 	for _, pod := range pods.Items {
 		var _podTree = pterm.TreeNode{
@@ -229,23 +230,14 @@ func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) {
 			return
 		}
 	}
-	multiPrinter.Start()
-	/*var spinner *pterm.SpinnerPrinter
 	if *follow {
-		spinner, _ = pterm.DefaultSpinner.Start("Streaming logs...")
-	}*/
+		pterm.Info.Printfln("Press %s to stop streaming logs.", pterm.Green("Ctrl+C"))
+	}
+
 	// wait for all goroutines to finish
 	wg.Wait()
 	close(chanContainers)
 
-	/*if *follow {
-		if spinner != nil {
-			err := spinner.Stop()
-			if err != nil {
-				return
-			}
-		}
-	}*/
 }
 
 func streamLog(pod v1.Pod, container v1.Container, logOpts v1.PodLogOptions, wg *sync.WaitGroup, multiPrinter *pterm.MultiPrinter) {
