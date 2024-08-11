@@ -8,7 +8,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -414,7 +413,7 @@ It is designed to be fast and efficient, and can get logs from multiple Pods/Con
 func Execute() {
 	tty, errTty := tty.Open()
 	if errTty != nil {
-		log.Fatal(errTty)
+		panic(errTty)
 	}
 
 	go func() {
@@ -422,7 +421,7 @@ func Execute() {
 		for {
 			r, err := tty.ReadRune()
 			if err != nil {
-				log.Fatal(err)
+				panic(err)
 			}
 
 			// if pressed q or Q
