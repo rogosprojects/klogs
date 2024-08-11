@@ -277,7 +277,7 @@ func findPodByLabel(label string) v1.PodList {
 	return *pods
 }
 
-func writeLogToDisk(logs io.ReadCloser, podName string, containerName string, multiPrinter *pterm.MultiPrinter) int {
+func writeLogToDisk(logs io.ReadCloser, podName string, containerName string, multiPrinter *pterm.MultiPrinter) {
 	anyLogFound = true
 
 	logName := fmt.Sprintf("%s-%s.log", podName, containerName)
@@ -288,18 +288,6 @@ func writeLogToDisk(logs io.ReadCloser, podName string, containerName string, mu
 			panic(err.Error())
 		}
 	}(logs)
-
-	// Test if logs is empty
-	bufTest := make([]byte, 1)
-	n, err := logs.Read(bufTest)
-	if err != nil && err != io.EOF {
-		panic(err.Error())
-	}
-	if n == 0 {
-		// some logs could be empty
-		pterm.Warning.Printfln("Empty logs for %s", logName)
-		return 0
-	}
 
 	// Create the log file
 	if err := os.MkdirAll(*logPath, 0755); err != nil {
@@ -318,45 +306,39 @@ func writeLogToDisk(logs io.ReadCloser, podName string, containerName string, mu
 		}
 	}(logFile)
 
-	// Write the first byte that was read as a test
-	if _, err := logFile.Write(bufTest); err != nil {
-		panic(err.Error())
+	var spinnerMsg string
+	if *follow {
+		spinnerMsg = "Streaming logs..."
+	} else {
+		spinnerMsg = "Acquiring logs..."
 	}
-	spinner1, _ := pterm.DefaultSpinner.WithWriter(multiPrinter.NewWriter()).Start("Streaming logs...")
+	spinner1, _ := pterm.DefaultSpinner.WithWriter(multiPrinter.NewWriter()).Start(spinnerMsg)
 	defer spinner1.Stop()
 
-	var written = 1
-
-	reader := bufio.NewReader(logs)
-	data := make([]byte, 100)
-	for {
-		n, err := reader.Read(data)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			fmt.Println(err)
-			return 0
-		}
-		// Write the data to the file
-		w, err := logFile.Write(data[:n])
-		if err != nil {
-			panic(err.Error())
-		}
-		written += w
+	reader := &MeteredReader{reader: bufio.NewReader(logs), notify: func(total, delta int) {
 		s := pterm.Style{pterm.FgWhite, pterm.BgDefault, pterm.Bold, pterm.Italic}
 
 		spinner1.Text = pterm.Info.WithPrefix(
 			pterm.Prefix{
-				Text:  convertBytes(written),
+				Text:  convertBytes(total),
 				Style: &s,
 			}).
 			WithMessageStyle(&s).
 			Sprintf("%s/%s", podName, containerName)
+	}}
+
+	// Create a buffered reader and writer
+	writer := bufio.NewWriter(logFile)
+
+	// Copy data from the reader to the writer
+	if _, err := io.Copy(writer, reader); err != nil {
+		panic(err.Error())
 	}
 
-	// return the number of bytes written in kilobytes
-	return written
+	// Flush any remaining data to the file
+	if err := writer.Flush(); err != nil {
+		panic(err.Error())
+	}
 }
 
 func convertBytes(bytes int) string {
@@ -425,4 +407,22 @@ func init() {
 	} else {
 		pterm.Fatal.Printfln("Kubeconfig not found, please provide a kubeconfig file with --kubeconfig")
 	}
+}
+
+// notify some bytes have been read
+type NotifyReadSize func(total int, delta int)
+
+// decorate Reader to measure reads
+type MeteredReader struct {
+	reader io.Reader
+	total  int
+	notify NotifyReadSize
+}
+
+// notify progress through specified function
+func (w *MeteredReader) Read(p []byte) (int, error) {
+	size, err := w.reader.Read(p)
+	w.total += size
+	w.notify(w.total, size)
+	return size, err
 }
