@@ -8,12 +8,14 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
 	"atomicgo.dev/keyboard/keys"
+	"github.com/mattn/go-tty"
 	"github.com/pterm/pterm"
 	"github.com/pterm/pterm/putils"
 	"github.com/spf13/cobra"
@@ -254,7 +256,7 @@ func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) {
 		}
 	}
 	if *follow {
-		pterm.Info.Printfln("Press %s to stop streaming logs.", pterm.Green("Ctrl+C"))
+		pterm.Info.Printfln("Press %s to stop streaming logs.", pterm.Green("q"))
 	}
 
 	// wait for all goroutines to finish
@@ -410,7 +412,29 @@ It is designed to be fast and efficient, and can get logs from multiple Pods/Con
 
 // Execute is the entry point for the command
 func Execute() {
+	tty, errTty := tty.Open()
+	if errTty != nil {
+		log.Fatal(errTty)
+	}
+
+	go func() {
+		defer tty.Close()
+		for {
+			r, err := tty.ReadRune()
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			// if pressed q or Q
+			if r == 113 || r == 81 {
+				pterm.Info.Printfln("Exiting...")
+				os.Exit(0)
+			}
+		}
+	}()
+
 	err := rootCmd.Execute()
+
 	if err != nil {
 		os.Exit(1)
 	}
