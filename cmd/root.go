@@ -43,6 +43,24 @@ var (
 	defaultLogPath = "logs/" + time.Now().Format("2006-01-02T15:04")
 )
 
+// NotifyReadSize notify some bytes have been read
+type NotifyReadSize func(total int, delta int)
+
+// MeteredReader decorate Reader to measure reads
+type MeteredReader struct {
+	reader io.Reader
+	total  int
+	notify NotifyReadSize
+}
+
+// notify progress through specified function
+func (w *MeteredReader) Read(p []byte) (int, error) {
+	size, err := w.reader.Read(p)
+	w.total += size
+	w.notify(w.total, size)
+	return size, err
+}
+
 // splashScreen prints the splash screen!
 func splashScreen() {
 
@@ -57,6 +75,7 @@ func splashScreen() {
 	pterm.DefaultParagraph.Printfln("Version: %s", BuildVersion)
 }
 
+// configClient creates a new Kubernetes client
 func configClient() {
 
 	// use the current context in kubeconfig
@@ -72,6 +91,7 @@ func configClient() {
 	}
 }
 
+// configNamespace configures the namespace to use
 func configNamespace() {
 	if *namespace == "" {
 		*namespace = getCurrentNamespace(*kubeconfig)
@@ -87,6 +107,7 @@ func configNamespace() {
 	pterm.Info.Printfln("Using Namespace: %s", pterm.Green(*namespace))
 }
 
+// listNamespaces lists all namespaces in the cluster
 func listNamespaces() {
 	// get namespaces and prompt user to select one
 	namespaces, err := client.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{})
@@ -106,6 +127,7 @@ func listNamespaces() {
 		Show()
 }
 
+// listAllPods lists all the ready pods in the namespace
 func listAllPods() v1.PodList {
 	var _podList v1.PodList
 	pods, err := client.CoreV1().Pods(*namespace).List(context.TODO(), metav1.ListOptions{})
@@ -146,6 +168,7 @@ func listAllPods() v1.PodList {
 	return _podList
 }
 
+// showInteractivePodSelect shows an interactive multiselect printer with the pod names
 func showInteractivePodSelect(podNames []string) []string {
 	// Create a new interactive multiselect printer with the options
 	// Disable the filter and set the keys for confirming and selecting options
@@ -179,6 +202,7 @@ func getCurrentNamespace(kubeconfig string) string {
 	return ns
 }
 
+// getLopOpts returns the Kubernetes option for logs
 func getLopOpts() v1.PodLogOptions {
 	var logOpts v1.PodLogOptions
 	// Since
@@ -201,6 +225,7 @@ func getLopOpts() v1.PodLogOptions {
 	return logOpts
 }
 
+// getPodLogs gets logs for the pods
 func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) {
 	var wg sync.WaitGroup
 	// Create a multi printer for managing multiple printers
@@ -236,6 +261,7 @@ func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) {
 	wg.Wait()
 }
 
+// streamLog streams logs for the container
 func streamLog(pod v1.Pod, container v1.Container, logOpts v1.PodLogOptions, wg *sync.WaitGroup, multiPrinter *pterm.MultiPrinter) {
 	defer wg.Done()
 
@@ -255,6 +281,7 @@ func streamLog(pod v1.Pod, container v1.Container, logOpts v1.PodLogOptions, wg 
 
 }
 
+// findPodByLabel finds pods by label
 func findPodByLabel(label string) v1.PodList {
 	pterm.Info.Printf("Getting Pods in namespace %s with label %s\n\n", pterm.Green(*namespace), pterm.Green(label))
 
@@ -277,6 +304,7 @@ func findPodByLabel(label string) v1.PodList {
 	return *pods
 }
 
+// writeLogToDisk writes logs to disk
 func writeLogToDisk(logs io.ReadCloser, podName string, containerName string, multiPrinter *pterm.MultiPrinter) {
 	anyLogFound = true
 
@@ -306,25 +334,21 @@ func writeLogToDisk(logs io.ReadCloser, podName string, containerName string, mu
 		}
 	}(logFile)
 
-	var spinnerMsg string
-	if *follow {
-		spinnerMsg = "Streaming logs..."
-	} else {
-		spinnerMsg = "Acquiring logs..."
-	}
-	spinner1, _ := pterm.DefaultSpinner.WithWriter(multiPrinter.NewWriter()).Start(spinnerMsg)
-	defer spinner1.Stop()
+	spinnerLog, _ := pterm.DefaultSpinner.WithWriter(multiPrinter.NewWriter()).
+		WithRemoveWhenDone(false).Start("Acquiring logs...")
+	defer spinnerLog.Stop()
 
 	reader := &MeteredReader{reader: bufio.NewReader(logs), notify: func(total, delta int) {
 		s := pterm.Style{pterm.FgWhite, pterm.BgDefault, pterm.Bold, pterm.Italic}
 
-		spinner1.Text = pterm.Info.WithPrefix(
+		spinnerLog.UpdateText(pterm.Info.WithPrefix(
 			pterm.Prefix{
 				Text:  convertBytes(total),
 				Style: &s,
 			}).
 			WithMessageStyle(&s).
-			Sprintf("%s/%s", podName, containerName)
+			Sprintf("%s/%s", podName, containerName))
+
 	}}
 
 	// Create a buffered reader and writer
@@ -407,22 +431,4 @@ func init() {
 	} else {
 		pterm.Fatal.Printfln("Kubeconfig not found, please provide a kubeconfig file with --kubeconfig")
 	}
-}
-
-// notify some bytes have been read
-type NotifyReadSize func(total int, delta int)
-
-// decorate Reader to measure reads
-type MeteredReader struct {
-	reader io.Reader
-	total  int
-	notify NotifyReadSize
-}
-
-// notify progress through specified function
-func (w *MeteredReader) Read(p []byte) (int, error) {
-	size, err := w.reader.Read(p)
-	w.total += size
-	w.notify(w.total, size)
-	return size, err
 }
