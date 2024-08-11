@@ -306,7 +306,13 @@ func writeLogToDisk(logs io.ReadCloser, podName string, containerName string, mu
 		}
 	}(logFile)
 
-	spinner1, _ := pterm.DefaultSpinner.WithWriter(multiPrinter.NewWriter()).Start("Streaming logs...")
+	var spinnerMsg string
+	if *follow {
+		spinnerMsg = "Streaming logs..."
+	} else {
+		spinnerMsg = "Acquiring logs..."
+	}
+	spinner1, _ := pterm.DefaultSpinner.WithWriter(multiPrinter.NewWriter()).Start(spinnerMsg)
 	defer spinner1.Stop()
 
 	reader := &MeteredReader{reader: bufio.NewReader(logs), notify: func(total, delta int) {
