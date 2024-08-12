@@ -1,5 +1,13 @@
 # Changelog
 
+## [v1.1.16] - 2024-08-12
+### :sparkles: New Features
+- [`9371c86`](https://github.com/rogosprojects/klogs/commit/9371c862aad0d7ce3407f35e961af2f899de2afa) - add print version flag *(commit by [@rogosprojects](https://github.com/rogosprojects))*
+
+### :bug: Bug Fixes
+- [`13caa51`](https://github.com/rogosprojects/klogs/commit/13caa519e3305dac37608d85e51f25395b78dba6) - lower go minimum version required *(commit by [@rogosprojects](https://github.com/rogosprojects))*
+
+
 ## [v1.1.15] - 2024-08-12
 ### :sparkles: New Features
 - [`de82e75`](https://github.com/rogosprojects/klogs/commit/de82e75baf64d603db5ada51eec5a846e13e1fdf) - press "q" button to exit follow mode *(commit by [@rogosprojects](https://github.com/rogosprojects))*
@@ -45,3 +53,4 @@ pass BuildVersion from the build system
 
 Initial public release
 [v1.1.15]: https://github.com/rogosprojects/klogs/compare/v1.1.14...v1.1.15
+[v1.1.16]: https://github.com/rogosprojects/klogs/compare/v1.1.15...v1.1.16
