@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"github.com/mattn/go-tty"
 	"io"
 	"os"
 	"path/filepath"
@@ -14,7 +15,6 @@ import (
 	"time"
 
 	"atomicgo.dev/keyboard/keys"
-	"github.com/mattn/go-tty"
 	"github.com/pterm/pterm"
 	"github.com/pterm/pterm/putils"
 	"github.com/spf13/cobra"
@@ -256,6 +256,7 @@ func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) {
 	}
 	if *follow {
 		pterm.Info.Printfln("Press %s to stop streaming logs.", pterm.Green("q"))
+		pressKeyToExit()
 	}
 
 	// wait for all goroutines to finish
@@ -409,31 +410,34 @@ It is designed to be fast and efficient, and can get logs from multiple Pods/Con
 	},
 }
 
-// Execute is the entry point for the command
-func Execute() {
-	tty, errTty := tty.Open()
+func pressKeyToExit() {
+	t, errTty := tty.Open()
 	if errTty != nil {
 		panic(errTty)
 	}
 
 	go func() {
-		defer tty.Close()
+		defer t.Close()
 		for {
-			r, err := tty.ReadRune()
+			key, err := t.ReadRune()
 			if err != nil {
 				panic(err)
 			}
 
 			// if pressed q or Q
-			if r == 113 || r == 81 {
+			if key == 113 || key == 81 {
 				pterm.Info.Printfln("Exiting...")
-				os.Exit(0)
+				break
 			}
 		}
+		os.Exit(0)
 	}()
 
-	err := rootCmd.Execute()
+}
 
+// Execute is the entry point for the command
+func Execute() {
+	err := rootCmd.Execute()
 	if err != nil {
 		os.Exit(1)
 	}
