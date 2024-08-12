@@ -50,7 +50,7 @@ Usage:
 | -s, --since     | string      | [optional] Only return logs newer than a relative duration. Examples: 1m, 2h, 2h45m |
 | -t, --tail      | int         | [optional] Number of lines to show from the end of the logs                         |
 | -f, --follow    | boolean     | [default:false] Stream logs in real-time                                            |
-
+| -v, --version   |             | Print version information and exit                                                  |
 
 ## Features
 
