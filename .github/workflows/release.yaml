@@ -7,6 +7,29 @@ on:
 
 jobs:
 
+  update-changelog:
+    name: Created draft release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: requarks/changelog-action@v1
+        name: "Update CHANGELOG"
+        id: changelog
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag: ${{ github.ref_name }}
+      - uses: softprops/action-gh-release@v2
+        name: "Add changes to release notes"
+        with:
+          body: ${{ steps.changelog.outputs.changes }}
+          draft: true
+      - name: Commit CHANGELOG.md
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          branch: master
+          commit_message: 'docs: update CHANGELOG.md for ${{ github.ref_name }} [skip ci]'
+          file_pattern: CHANGELOG.md
+
   releases-matrix:
     name: Release Go Binary
     runs-on: ubuntu-latest
@@ -43,28 +66,15 @@ jobs:
           md5sum: false
           ldflags: '-X github.com/${{ env.PACKAGE_NAME }}/cmd.BuildVersion=${{ env.RELEASE_TAG }}'
 
-  update-changelog:
-    needs: releases-matrix
-    name: Create release
+  publish-release:
+    needs:
+      - releases-matrix
+      - update-changelog
+    name: "Publish release"
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - uses: requarks/changelog-action@v1
-        name: "Update CHANGELOG"
-        id: changelog
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag: ${{ github.ref_name }}
-      - uses: softprops/action-gh-release@v2
-        name: "Add changes to release notes"
-        with:
-          body: ${{ steps.changelog.outputs.changes }}
-      - name: Commit CHANGELOG.md
-        uses: stefanzweifel/git-auto-commit-action@v5
-        with:
-          branch: master
-          commit_message: 'docs: update CHANGELOG.md for ${{ github.ref_name }} [skip ci]'
-          file_pattern: CHANGELOG.md
-
-
+        - uses: softprops/action-gh-release@v2
+          name: "Add changes to release notes"
+          with:
+            draft: false
 
