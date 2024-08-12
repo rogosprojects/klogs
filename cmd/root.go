@@ -30,12 +30,15 @@ var (
 	// BuildVersion is the version of the build, passed in by the build system
 	BuildVersion = "development"
 )
+
+// Flags input
 var (
 	kubeconfig, namespace, since, logPath *string
 	client                                *kubernetes.Clientset
 	labels                                *[]string
 	tail                                  *int64
 	follow                                *bool
+	printVersion                          *bool
 )
 
 var (
@@ -73,7 +76,6 @@ func splashScreen() {
 		return
 	} // Render the big text to the terminal
 
-	pterm.DefaultParagraph.Printfln("Version: %s", BuildVersion)
 }
 
 // configClient creates a new Kubernetes client
@@ -389,6 +391,11 @@ It is designed to be fast and efficient, and can get logs from multiple Pods/Con
 	Run: func(cmd *cobra.Command, args []string) {
 		var podList v1.PodList
 
+		if *printVersion {
+			pterm.Info.Printfln("Version: %s", BuildVersion)
+			os.Exit(0)
+		}
+
 		splashScreen()
 
 		configClient()
@@ -452,6 +459,7 @@ func init() {
 	since = rootCmd.Flags().StringP("since", "s", "", "Only return logs newer than a relative duration like 5s, 2m, or 3h. Defaults to all logs.")
 	tail = rootCmd.Flags().Int64P("tail", "t", -1, "Lines of the most recent log to save")
 	follow = rootCmd.Flags().BoolP("follow", "f", false, "Specify if the logs should be streamed")
+	printVersion = rootCmd.Flags().BoolP("version", "v", false, "Print the version of the tool")
 
 	if home := homedir.HomeDir(); home != "" && *kubeconfig == "" {
 		*kubeconfig = filepath.Join(home, ".kube", "config")
