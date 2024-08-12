@@ -51,3 +51,25 @@ jobs:
         executable_compression: upx -v
         md5sum: false
         ldflags: '-X github.com/${{ env.PACKAGE_NAME }}/cmd.BuildVersion=${{ env.RELEASE_TAG }}'
+  update-changelog:
+    name: Update release notes
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+      name: "Checkout"
+    - name: Update CHANGELOG
+      id: changelog
+      uses: requarks/changelog-action@v1
+      with:
+        token: ${{ github.token }}
+        tag: ${{ github.ref_name }}
+    - name: Add changes to release notes
+      uses: softprops/action-gh-release@v2
+      with:
+        body: ${{ steps.changelog.outputs.changes }}
+    - name: Commit CHANGELOG.md
+      uses: stefanzweifel/git-auto-commit-action@v5
+      with:
+        branch: master
+        commit_message: 'docs: update CHANGELOG.md for ${{ github.ref_name }} [skip ci]'
+        file_pattern: CHANGELOG.md
