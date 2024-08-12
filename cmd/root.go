@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"github.com/mattn/go-tty"
 	"io"
 	"os"
 	"path/filepath"
@@ -254,7 +255,8 @@ func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) {
 		}
 	}
 	if *follow {
-		pterm.Info.Printfln("Press %s to stop streaming logs.", pterm.Green("Ctrl+C"))
+		pterm.Info.Printfln("Press %s to stop streaming logs.", pterm.Green("q"))
+		pressKeyToExit()
 	}
 
 	// wait for all goroutines to finish
@@ -406,6 +408,31 @@ It is designed to be fast and efficient, and can get logs from multiple Pods/Con
 			pterm.Info.Printfln("Logs saved to %s", *logPath)
 		}
 	},
+}
+
+func pressKeyToExit() {
+	t, errTty := tty.Open()
+	if errTty != nil {
+		panic(errTty)
+	}
+
+	go func() {
+		defer t.Close()
+		for {
+			key, err := t.ReadRune()
+			if err != nil {
+				panic(err)
+			}
+
+			// if pressed q or Q
+			if key == 113 || key == 81 {
+				pterm.Info.Printfln("Exiting...")
+				break
+			}
+		}
+		os.Exit(0)
+	}()
+
 }
 
 // Execute is the entry point for the command
