@@ -1,6 +1,10 @@
 name: Upload Go test results
 
-on: [push]
+on:
+    push:
+        branches:
+        - master
+        - develop
 
 jobs:
   build:
