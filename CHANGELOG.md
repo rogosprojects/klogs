@@ -1,5 +1,20 @@
 # Changelog
 
+## [v1.1.15] - 2024-08-12
+### :sparkles: New Features
+- [`de82e75`](https://github.com/rogosprojects/klogs/commit/de82e75baf64d603db5ada51eec5a846e13e1fdf) - press "q" button to exit follow mode *(commit by [@rogosprojects](https://github.com/rogosprojects))*
+
+### :zap: Performance Improvements
+- [`165e5f3`](https://github.com/rogosprojects/klogs/commit/165e5f3d0338ed9b7fc1f98c45a62594dbfbaf74) - improve spinner when updating *(commit by [@rogosprojects](https://github.com/rogosprojects))*
+
+### :wrench: Chores
+- [`ecdd8fe`](https://github.com/rogosprojects/klogs/commit/ecdd8fe3c128652e86e646043aa3c7a382c5585a) - differentiate msg on follow *(commit by [@davidecavestro](https://github.com/davidecavestro))*
+- [`1bdcf0d`](https://github.com/rogosprojects/klogs/commit/1bdcf0d0313cb91a97ddc541ec8b0df285de3a2f) - generate release notes and update changelog *(commit by [@davidecavestro](https://github.com/davidecavestro))*
+- [`0bd1656`](https://github.com/rogosprojects/klogs/commit/0bd1656979ee1fd83eb168ab9b10b2efd0e90f92) - add support for testing on push *(commit by [@davidecavestro](https://github.com/davidecavestro))*
+- [`a4878ef`](https://github.com/rogosprojects/klogs/commit/a4878ef3ab2b1202750471b2c50701d40c642ea9) - removed unused dep *(commit by [@rogosprojects](https://github.com/rogosprojects))*
+- [`dbee160`](https://github.com/rogosprojects/klogs/commit/dbee160545701bba0241983950f7f6260feb9988) - starting tty.Open only in case of follow. *(commit by [@rogosprojects](https://github.com/rogosprojects))*
+
+
 ## v1.1.14
 New feature: `--follow` option to stream logs in real-time. This is a game-changer for debugging and monitoring. Improved goroutines to fetch logs from multiple pods/containers simultaneously. Faster. 🔥
 ## v1.1.13
@@ -29,3 +44,4 @@ pass BuildVersion from the build system
 ## v1.1.1
 
 Initial public release
+[v1.1.15]: https://github.com/rogosprojects/klogs/compare/v1.1.14...v1.1.15
