@@ -107,7 +107,7 @@ func configNamespace() {
 		listNamespaces()
 	}
 
-	pterm.Info.Printfln("Using Namespace: %s", pterm.Green(*namespace))
+	pterm.Info.Printfln("Using Namespace %s", pterm.Green(*namespace))
 }
 
 // listNamespaces lists all namespaces in the cluster
@@ -257,7 +257,7 @@ func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) {
 		}
 	}
 	if *follow {
-		pterm.Info.Printfln("Press %s to stop streaming logs.", pterm.Green("q"))
+		pterm.Info.Printfln("Press %s to stop streaming logs in %s", pterm.Green("q"), pterm.Green(*logPath))
 		pressKeyToExit()
 	}
 
@@ -412,7 +412,7 @@ It is designed to be fast and efficient, and can get logs from multiple Pods/Con
 		getPodLogs(podList, getLopOpts())
 
 		if anyLogFound {
-			pterm.Info.Printfln("Logs saved to %s", *logPath)
+			pterm.Info.Printfln("Logs saved to %s", pterm.Green(*logPath))
 		}
 	},
 }
@@ -433,7 +433,7 @@ func pressKeyToExit() {
 
 			// if pressed q or Q
 			if key == 113 || key == 81 {
-				pterm.Info.Printfln("Exiting...")
+				pterm.Info.Printfln("Exiting")
 				break
 			}
 		}
