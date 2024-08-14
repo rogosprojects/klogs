@@ -1,5 +1,10 @@
 # Changelog
 
+## [v1.1.17] - 2024-08-14
+### :wrench: Chores
+- [`63f50cb`](https://github.com/rogosprojects/klogs/commit/63f50cb7f3aeb4e68b1b107f23844a3735d4d3b9) - print log saving path with --follow too *(commit by [@rogosprojects](https://github.com/rogosprojects))*
+
+
 ## [v1.1.16] - 2024-08-12
 ### :sparkles: New Features
 - [`9371c86`](https://github.com/rogosprojects/klogs/commit/9371c862aad0d7ce3407f35e961af2f899de2afa) - add print version flag *(commit by [@rogosprojects](https://github.com/rogosprojects))*
@@ -54,3 +59,4 @@ pass BuildVersion from the build system
 Initial public release
 [v1.1.15]: https://github.com/rogosprojects/klogs/compare/v1.1.14...v1.1.15
 [v1.1.16]: https://github.com/rogosprojects/klogs/compare/v1.1.15...v1.1.16
+[v1.1.17]: https://github.com/rogosprojects/klogs/compare/v1.1.16...v1.1.17
