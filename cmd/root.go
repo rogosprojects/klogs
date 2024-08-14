@@ -7,12 +7,13 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/mattn/go-tty"
 	"io"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/mattn/go-tty"
 
 	"atomicgo.dev/keyboard/keys"
 	"github.com/pterm/pterm"
@@ -81,10 +82,14 @@ func splashScreen() {
 // configClient creates a new Kubernetes client
 func configClient() {
 
+	if home := homedir.HomeDir(); home != "" && *kubeconfig == "" {
+		*kubeconfig = filepath.Join(home, ".kube", "config")
+	}
+
 	// use the current context in kubeconfig
 	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
 	if err != nil {
-		panic(err.Error())
+		pterm.Fatal.Printfln("kubeconfig error while reading %s\nPlease provide a valid kubeconfig file with \"--kubeconfig <file_path>\"", *kubeconfig)
 	}
 
 	// create the client
@@ -461,9 +466,4 @@ func init() {
 	follow = rootCmd.Flags().BoolP("follow", "f", false, "Specify if the logs should be streamed")
 	printVersion = rootCmd.Flags().BoolP("version", "v", false, "Print the version of the tool")
 
-	if home := homedir.HomeDir(); home != "" && *kubeconfig == "" {
-		*kubeconfig = filepath.Join(home, ".kube", "config")
-	} else {
-		pterm.Fatal.Printfln("Kubeconfig not found, please provide a kubeconfig file with --kubeconfig")
-	}
 }
