@@ -45,7 +45,7 @@ var (
 var (
 	allPods        *bool
 	anyLogFound    bool
-	defaultLogPath = "logs/" + time.Now().Format("2006-01-02T15:04")
+	defaultLogPath = "logs/" + time.Now().Format("2006-01-02T15-04")
 )
 
 // NotifyReadSize notify some bytes have been read
