@@ -12,6 +12,7 @@ import (
 	"k8s.io/client-go/util/homedir"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -45,6 +46,10 @@ var (
 	allPods        *bool
 	defaultLogPath = "logs/" + time.Now().Format("2006-01-02T15-04")
 	wg             sync.WaitGroup
+)
+
+const (
+	fileNameSeparator = "__"
 )
 
 // splashScreen prints the splash screen!
@@ -222,9 +227,9 @@ func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) []string {
 	for i, pod := range pods.Items {
 		var _podTree = pterm.TreeNode{
 			Text: pterm.Info.
-				WithPrefix(pterm.Prefix{Text: pterm.Sprintf("[Pod #%d]", i+1), Style: pterm.Info.MessageStyle}).
+				WithPrefix(pterm.Prefix{Text: pod.Name}).
 				WithMessageStyle(pterm.DefaultBasicText.Style).
-				Sprintf(pod.Name),
+				Sprintf(pterm.Sprintf(pterm.Blue("[Pod #%d]"), i+1)),
 		}
 		var containerTree []pterm.TreeNode
 
@@ -242,7 +247,7 @@ func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) []string {
 	}
 
 	// Print the tree
-	pterm.Info.Printfln(pterm.Sprintf("Found %d Pod(s) %d Container(s)", len(pods.Items), len(logFiles)))
+	pterm.Info.Printfln(pterm.Sprintf("Found %s Pod(s) %s Container(s)", pterm.Green(len(pods.Items)), pterm.Green(len(logFiles))))
 	for _, tree := range trees {
 		err := tree.Render()
 		if err != nil {
@@ -259,7 +264,7 @@ func printLogSize(logFile []string) {
 		pterm.Error.Printfln("No logs saved")
 		return
 	}
-	pterm.Info.Printfln(pterm.Sprintf("Logs saved to: %s", pterm.Green(*logPath)))
+	pterm.Info.Printfln("Logs saved to " + pterm.Green(*logPath))
 
 	for _, log := range logFile {
 		_log := filepath.Base(log)
@@ -268,13 +273,14 @@ func printLogSize(logFile []string) {
 			continue
 		}
 
+		podName, containerName := strings.Split(_log, fileNameSeparator)[0], strings.Split(_log, fileNameSeparator)[1]
+
 		s := pterm.Style{pterm.FgGray, pterm.BgDefault, pterm.Italic}
 
 		pterm.Info.WithPrefix(
 			pterm.Prefix{
-				Text:  convertBytes(fileInfo.Size()),
-				Style: &s,
-			}).Println("\t", _log)
+				Text: podName + fileNameSeparator + pterm.Green(containerName),
+			}).Println(pterm.DefaultBasicText.WithStyle(&s).Sprintf("\t" + convertBytes(fileInfo.Size())))
 	}
 
 }
@@ -306,7 +312,7 @@ func streamLog(pod v1.Pod, container v1.Container, logFile *os.File, logOpts v1.
 }
 
 func createLogFile(podName string, containerName string) *os.File {
-	logName := fmt.Sprintf("%s-%s.log", podName, containerName)
+	logName := fmt.Sprintf("%s%s%s.log", podName, fileNameSeparator, containerName)
 
 	// Create the log file
 	if err := os.MkdirAll(*logPath, 0755); err != nil {
