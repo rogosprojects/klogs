@@ -43,7 +43,7 @@ var (
 
 var (
 	allPods        *bool
-	defaultLogPath = "logs/" + time.Now().Format("2006-01-02T15:04")
+	defaultLogPath = "logs/" + time.Now().Format("2006-01-02T15-04")
 	wg             sync.WaitGroup
 )
 
