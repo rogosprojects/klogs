@@ -242,13 +242,14 @@ func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) []string {
 	}
 
 	// Print the tree
+	pterm.Info.Printfln(pterm.Sprintf("Found %d Pod(s) %d Container(s)", len(pods.Items), len(logFiles)))
 	for _, tree := range trees {
 		err := tree.Render()
 		if err != nil {
 			panic(err.Error())
 		}
 	}
-	pterm.Info.Printfln(pterm.Sprintf("Found %d Pod(s) %d Container(s), acquiring logs 🚀 ", len(pods.Items), len(logFiles)))
+	pterm.Info.Printfln("Acquiring logs 🚀")
 
 	return logFiles
 }
@@ -267,7 +268,7 @@ func printLogSize(logFile []string) {
 			continue
 		}
 
-		s := pterm.Style{pterm.FgWhite, pterm.BgDefault, pterm.Bold, pterm.Italic}
+		s := pterm.Style{pterm.FgGray, pterm.BgDefault, pterm.Italic}
 
 		pterm.Info.WithPrefix(
 			pterm.Prefix{
