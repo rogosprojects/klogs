@@ -11,7 +11,7 @@ func TestConvertBytes(t *testing.T) {
 	// Define test cases
 	tests := []struct {
 		name     string
-		input    int
+		input    int64
 		expected string
 	}{
 		{"Zero bytes", 0, pterm.Red(" (0 B)")},
