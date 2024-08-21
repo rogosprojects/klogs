@@ -276,9 +276,10 @@ func printLogSize(logFile []string) {
 			continue
 		}
 		podName, containerName := strings.Split(_log, fileNameSeparator)[0], strings.Split(_log, fileNameSeparator)[1]
+		containerName = strings.TrimSuffix(containerName, ".log")
 
 		if podName == previousPod {
-			podName = ""
+			podName = pterm.Gray(podName)
 		}
 		tableData = append(tableData, []string{podName, containerName, convertBytes(fileInfo.Size())})
 		previousPod = podName
