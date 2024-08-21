@@ -266,23 +266,27 @@ func printLogSize(logFile []string) {
 	}
 	pterm.Info.Printfln("Logs saved to " + pterm.Green(*logPath))
 
+	tableData := pterm.TableData{{"Pod", "Container", "Size"}}
+
+	var previousPod string
 	for _, log := range logFile {
 		_log := filepath.Base(log)
 		fileInfo, err := os.Stat(log)
 		if err != nil {
 			continue
 		}
-
 		podName, containerName := strings.Split(_log, fileNameSeparator)[0], strings.Split(_log, fileNameSeparator)[1]
 
-		s := pterm.Style{pterm.FgGray, pterm.BgDefault, pterm.Italic}
-
-		pterm.Info.WithPrefix(
-			pterm.Prefix{
-				Text: podName + fileNameSeparator + pterm.Green(containerName),
-			}).Println(pterm.DefaultBasicText.WithStyle(&s).Sprintf("\t" + convertBytes(fileInfo.Size())))
+		if podName == previousPod {
+			podName = ""
+		}
+		tableData = append(tableData, []string{podName, containerName, convertBytes(fileInfo.Size())})
+		previousPod = podName
 	}
-
+	err := pterm.DefaultTable.WithHasHeader().WithBoxed().WithData(tableData).Render()
+	if err != nil {
+		pterm.Error.Printfln("Error rendering table")
+	}
 }
 
 // streamLog streams logs for the container
@@ -395,15 +399,15 @@ func pressKeyToExit() {
 
 func convertBytes(bytes int64) string {
 	if bytes == 0 {
-		return pterm.Red(" (0 B)")
+		return pterm.Red("0 B")
 	}
 	if bytes < 1024 {
-		return pterm.Sprintf(" (%d B)", bytes)
+		return pterm.Sprintf("%d B", bytes)
 	}
 	if bytes < 1024*1024 {
-		return pterm.Sprintf(" (%d KB)", bytes/1024)
+		return pterm.Sprintf("%d KB", bytes/1024)
 	}
-	return pterm.Sprintf(" (%d MB)", bytes/1024/1024)
+	return pterm.Sprintf("%d MB", bytes/1024/1024)
 }
 
 var rootCmd = &cobra.Command{
