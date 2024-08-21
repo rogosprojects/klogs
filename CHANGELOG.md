@@ -1,5 +1,12 @@
 # Changelog
 
+## [v1.1.18] - 2024-08-20
+### :bug: Bug Fixes
+- [`c9bc851`](https://github.com/rogosprojects/klogs/commit/c9bc851b99bd5442e2116c6bd0071b62522ee931) - handle incorrect kubeconfig file with Fatal msg *(commit by [@rogosprojects](https://github.com/rogosprojects))*
+- [`21edee9`](https://github.com/rogosprojects/klogs/commit/21edee9a4fb92ca0056d13aee011c548797dd8bd) - avoid race conditions! *(commit by [@rogosprojects](https://github.com/rogosprojects))*
+- [`38fa5b3`](https://github.com/rogosprojects/klogs/commit/38fa5b3c0ac060c37d3628bf6477d27e881d9347) - avoid invalid chars in folder name *(commit by [@rogosprojects](https://github.com/rogosprojects))*
+
+
 ## [v1.1.17] - 2024-08-14
 ### :wrench: Chores
 - [`63f50cb`](https://github.com/rogosprojects/klogs/commit/63f50cb7f3aeb4e68b1b107f23844a3735d4d3b9) - print log saving path with --follow too *(commit by [@rogosprojects](https://github.com/rogosprojects))*
@@ -60,3 +67,4 @@ Initial public release
 [v1.1.15]: https://github.com/rogosprojects/klogs/compare/v1.1.14...v1.1.15
 [v1.1.16]: https://github.com/rogosprojects/klogs/compare/v1.1.15...v1.1.16
 [v1.1.17]: https://github.com/rogosprojects/klogs/compare/v1.1.16...v1.1.17
+[v1.1.18]: https://github.com/rogosprojects/klogs/compare/v1.1.17...v1.1.18
