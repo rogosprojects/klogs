@@ -278,10 +278,11 @@ func printLogSize(logFile []string) {
 		podName, containerName := strings.Split(_log, fileNameSeparator)[0], strings.Split(_log, fileNameSeparator)[1]
 		containerName = strings.TrimSuffix(containerName, ".log")
 
+		podNameLabelColor := podName
 		if podName == previousPod {
-			podName = pterm.Gray(podName)
+			podNameLabelColor = pterm.Gray(podName)
 		}
-		tableData = append(tableData, []string{podName, containerName, convertBytes(fileInfo.Size())})
+		tableData = append(tableData, []string{podNameLabelColor, containerName, convertBytes(fileInfo.Size())})
 		previousPod = podName
 	}
 	err := pterm.DefaultTable.WithHasHeader().WithBoxed().WithData(tableData).Render()
