@@ -222,6 +222,10 @@ func getLopOpts() v1.PodLogOptions {
 
 // getPodLogs gets logs for the pods
 func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) []string {
+	if len(pods.Items) == 0 {
+		return []string{}
+	}
+
 	var logFiles []string
 	var trees []*pterm.TreePrinter
 	for i, pod := range pods.Items {
