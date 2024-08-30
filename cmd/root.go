@@ -193,7 +193,7 @@ func getCurrentNamespace(kubeconfig string) string {
 	if len(ns) == 0 {
 		ns = "default"
 	}
-
+	pterm.Info.Printfln("Using Context %s", pterm.Green(config.CurrentContext))
 	return ns
 }
 
