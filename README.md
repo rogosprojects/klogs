@@ -2,7 +2,7 @@
 
 # klogs
 [![Go Report Card](https://goreportcard.com/badge/github.com/derailed/k9s?)](https://goreportcard.com/report/github.com/derailed/k9s)
-[![GitHub release](https://img.shields.io/github/release/rogosprojects/klogs.svg)]()
+[![GitHub release](https://img.shields.io/github/release/rogosprojects/klogs.svg)](https://github.com/rogosprojects/klogs/releases/latest)
 
 Kubernetes batch log extractor written in GO. *Blazing fast. 🔥*
 
