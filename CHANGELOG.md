@@ -1,5 +1,16 @@
 # Changelog
 
+## [v1.1.20] - 2024-09-01
+### :sparkles: New Features
+- [`d728420`](https://github.com/rogosprojects/klogs/commit/d7284205919d3159027238d93403b3f15b79b2e2) - print current kube context *(commit by [@rogosprojects](https://github.com/rogosprojects))*
+- [`07a9323`](https://github.com/rogosprojects/klogs/commit/07a9323ab71cb38def1eace1a474a79fc3ab15b5) - support for logging initContainer *(commit by [@rogosprojects](https://github.com/rogosprojects))*
+
+### :bug: Bug Fixes
+- [`58ad3d0`](https://github.com/rogosprojects/klogs/commit/58ad3d01a13f09a1d224261265d57f892ebb47dc) - print color for same pods *(commit by [@rogosprojects](https://github.com/rogosprojects))*
+- [`8794e69`](https://github.com/rogosprojects/klogs/commit/8794e69c3c2eb9e4c3c6a79ac2de2a44cfc26468) - fast exit if no pods are found *(commit by [@rogosprojects](https://github.com/rogosprojects))*
+- [`909a7b8`](https://github.com/rogosprojects/klogs/commit/909a7b88eedd9c5cabeaa03ddd25c28626ee72f9) - warn if stream ends prematurely *(commit by [@rogosprojects](https://github.com/rogosprojects))*
+
+
 ## [v1.1.18] - 2024-08-20
 ### :bug: Bug Fixes
 - [`c9bc851`](https://github.com/rogosprojects/klogs/commit/c9bc851b99bd5442e2116c6bd0071b62522ee931) - handle incorrect kubeconfig file with Fatal msg *(commit by [@rogosprojects](https://github.com/rogosprojects))*
@@ -68,3 +79,4 @@ Initial public release
 [v1.1.16]: https://github.com/rogosprojects/klogs/compare/v1.1.15...v1.1.16
 [v1.1.17]: https://github.com/rogosprojects/klogs/compare/v1.1.16...v1.1.17
 [v1.1.18]: https://github.com/rogosprojects/klogs/compare/v1.1.17...v1.1.18
+[v1.1.20]: https://github.com/rogosprojects/klogs/compare/v1.1.19...v1.1.20
