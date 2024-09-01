@@ -43,9 +43,9 @@ var (
 )
 
 var (
-	allPods        *bool
-	defaultLogPath = "logs/" + time.Now().Format("2006-01-02T15-04")
-	wg             sync.WaitGroup
+	allPods, initContainer *bool
+	defaultLogPath         = "logs/" + time.Now().Format("2006-01-02T15-04")
+	wg                     sync.WaitGroup
 )
 
 const (
@@ -236,6 +236,19 @@ func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) []string {
 				Sprintf(pterm.Sprintf(pterm.Blue("[Pod #%d]"), i+1)),
 		}
 		var containerTree []pterm.TreeNode
+
+		if *initContainer {
+			for _, initC := range pod.Spec.InitContainers {
+				containerTree = append(containerTree, pterm.TreeNode{Text: initC.Name + pterm.Gray(" [init]")})
+				_podTree.Children = containerTree
+
+				logFile := createLogFile(pod.Name, initC.Name)
+				logFiles = append(logFiles, logFile.Name())
+
+				wg.Add(1)
+				go streamLog(pod, initC, logFile, logOpts)
+			}
+		}
 
 		for _, container := range pod.Spec.Containers {
 			containerTree = append(containerTree, pterm.TreeNode{Text: container.Name})
@@ -475,5 +488,6 @@ func init() {
 	tail = rootCmd.Flags().Int64P("tail", "t", -1, "Lines of the most recent log to save")
 	follow = rootCmd.Flags().BoolP("follow", "f", false, "Specify if the logs should be streamed")
 	printVersion = rootCmd.Flags().BoolP("version", "v", false, "Print the version of the tool")
+	initContainer = rootCmd.Flags().BoolP("init", "i", false, "Get logs for init containers")
 
 }

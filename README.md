@@ -12,12 +12,12 @@ Kubernetes batch log extractor written in GO. *Blazing fast. 🔥*
 
 ## Features
 
-- **Efficient Log Extraction**: Quickly collect logs from Kubernetes pods even if the pod has multiple containers.
-- **Namespace Support**: Allows targeting logs within specific namespaces.
+- **Efficient Log Extraction**: Quickly collect logs from Kubernetes pods even if the pod has multiple containers or Init Containers.
+- **Follow Logs**: Stream & save logs in real-time for debugging and monitoring.
 - **Label Filtering**: Extract logs from pods matching specific labels.
 - **Multiple-Pods Log Download**: Supports downloading logs from multiple pods simultaneously, enhancing efficiency when dealing with large-scale deployments.
 - **Output Flexibility**: Saves logs to a specified directory or outputs to date-based folder.
-- **Follow Logs**: Stream logs in real-time for debugging and monitoring.
+
 
 ## Installation
 
@@ -52,6 +52,7 @@ Usage:
 | -s, --since     | string      | [optional] Only return logs newer than a relative duration. Examples: 1m, 2h, 2h45m |
 | -t, --tail      | int         | [optional] Number of lines to show from the end of the logs                         |
 | -f, --follow    | boolean     | [default:false] Stream logs in real-time                                            |
+| -i, --init      | boolean     | [default:false] Include Init Containers logs                                         |
 | -v, --version   |             | Print version information and exit                                                  |
 
 ## Features
@@ -80,7 +81,7 @@ Usage:
 ***Example:***
   `klogs -n my-namespace -l app=my-app -p /path/to/logs -s 5m -t 100`
 
-* **Follow Logs**: If the "follow" flag is set, the logs will be streamed in real-time.
+* **Follow Logs**: If the "follow" flag is set, the logs will be streamed and saved to local in real-time.
 
 ***Example:***
   `klogs -n my-namespace -l app=my-app -f`
