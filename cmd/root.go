@@ -311,6 +311,9 @@ func printLogSize(logFile []string) {
 // streamLog streams logs for the container
 func streamLog(pod v1.Pod, container v1.Container, logFile *os.File, logOpts v1.PodLogOptions) {
 	defer wg.Done()
+	defer func() {
+		pterm.Warning.Printfln("Streaming logs ended prematurely for Pod: %s, Container: %s", pod.Name, container.Name)
+	}()
 
 	logOpts.Container = container.Name
 	// get logs for the container
@@ -320,7 +323,6 @@ func streamLog(pod v1.Pod, container v1.Container, logFile *os.File, logOpts v1.
 	logs, err := req.Stream(context.Background())
 	if err != nil {
 		pterm.Error.Printfln("Error getting logs for container %s\n%v", container.Name, err)
-		//containerTree = append(containerTree, pterm.TreeNode{Text: pterm.Red(container.Name)})
 		return
 	}
 	defer func(logs io.ReadCloser) {
