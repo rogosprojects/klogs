@@ -132,15 +132,18 @@ func listAllPods() v1.PodList {
 
 	var podMap = make(map[string]v1.Pod)
 	var podNames []string
+	var podNotReady []string
+
 	for _, pod := range pods.Items {
-		// is the pod ready?
-		for _, condition := range pod.Status.Conditions {
-			if condition.Type == v1.PodReady && condition.Status == v1.ConditionTrue {
-				podMap[pod.Name] = pod
-				podNames = append(podNames, pod.Name)
-				break
+
+		for _, containerStatus := range pod.Status.ContainerStatuses {
+			if !containerStatus.Ready {
+				podNotReady = append(podNotReady, pod.Name)
 			}
 		}
+
+		podMap[pod.Name] = pod
+		podNames = append(podNames, pod.Name)
 	}
 
 	if len(podNames) == 0 {
@@ -149,6 +152,9 @@ func listAllPods() v1.PodList {
 	}
 
 	if !*allPods {
+		if (len(podNotReady)) > 0 {
+			pterm.Warning.Println("Unhealthy Pods:\n" + strings.Join(podNotReady, "\n"))
+		}
 		podNames = showInteractivePodSelect(podNames)
 		if len(podNames) == 0 {
 			pterm.Error.Printfln("No pods selected")
