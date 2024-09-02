@@ -123,17 +123,21 @@ func listNamespaces() {
 		Show()
 }
 
-// listAllPods lists all the ready pods in the namespace
-func listAllPods() v1.PodList {
-	var _podList v1.PodList
-	pods, err := client.CoreV1().Pods(*namespace).List(context.TODO(), metav1.ListOptions{})
+func kGetAllPods(ns string) v1.PodList {
+	podList, err := client.CoreV1().Pods(ns).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		panic(err.Error())
 	}
+	return *podList
+}
+
+// listAllPods lists all the ready pods in the namespace
+func listAllPods() v1.PodList {
+	_podList := v1.PodList{}
 
 	var podMap = make(map[string]v1.Pod)
 	var podNames []string
-	for _, pod := range pods.Items {
+	for _, pod := range kGetAllPods(*namespace).Items {
 		// is the pod ready?
 		for _, condition := range pod.Status.Conditions {
 			if condition.Type == v1.PodReady && condition.Status == v1.ConditionTrue {
@@ -242,17 +246,16 @@ func getPodLogsV2(pod v1.Pod, logOpts v1.PodLogOptions) {
 		}
 	}
 	var containerTree []pterm.TreeNode
-
 	for _, container := range pod.Spec.Containers {
 
 		containerTree = append(containerTree, pterm.TreeNode{Text: container.Name})
-		fmt.Printf("Streamed logs for Pod: %s, Container: %s\n", pod.Name, container.Name)
+		//fmt.Printf("Streamed logs for Pod: %s, Container: %s\n", pod.Name, container.Name)
 
 		logFile := createLogFile(pod.Name, container.Name)
 
 		wg.Add(1)
 		go streamLog(pod, container, logFile, logOpts)
-		fmt.Printf("Log file: %s\n", logFile.Name())
+		//fmt.Printf("Log file: %s\n", logFile.Name())
 	}
 	_podTree.Children = containerTree
 	pterm.DefaultTree.WithRoot(_podTree).Render()
@@ -351,7 +354,7 @@ func streamLog(pod v1.Pod, container v1.Container, logFile *os.File, logOpts v1.
 	defer wg.Done()
 	if *follow {
 		defer func() {
-			pterm.Warning.Printfln("Streaming logs ended prematurely for Pod: %s, Container: %s [%s]", pod.Name, container.Name, pod.Status.Phase)
+			pterm.Warning.Printfln("Streaming logs ended prematurely for Pod: %s, Container: %s", pod.Name, container.Name)
 		}()
 	}
 
@@ -413,13 +416,12 @@ func writeLogToDisk(logs io.ReadCloser, logFile *os.File) {
 
 // findPodByLabel finds pods by label
 func findPodByLabel(label string) v1.PodList {
-	pterm.Info.Printf("Getting Pods with label %s\n\n", pterm.Green(label))
 
 	pods, err := client.CoreV1().Pods(*namespace).List(context.TODO(), metav1.ListOptions{
 		LabelSelector: label,
 	})
 	if statusError, isStatus := err.(*errors.StatusError); isStatus {
-		fmt.Printf("Error getting pods in namespace %s: %v\n",
+		pterm.Error.Printf("Error getting pods in namespace %s: %v\n",
 			*namespace, statusError.ErrStatus.Message)
 	}
 	if err != nil {
@@ -478,7 +480,6 @@ var rootCmd = &cobra.Command{
 It is designed to be fast and efficient, and can get logs from multiple Pods/Containers at once. Blazing fast. 🔥`,
 
 	Run: func(cmd *cobra.Command, args []string) {
-		var podList v1.PodList
 
 		if *printVersion {
 			pterm.Info.Printfln("Version: %s", BuildVersion)
@@ -490,68 +491,33 @@ It is designed to be fast and efficient, and can get logs from multiple Pods/Con
 		configClient()
 		configNamespace()
 
+		var podList v1.PodList
+		var monitoredPods []string
+		var podsChannel = make(chan v1.Pod, 50)
+		//var filesChannel = make(chan os.File, 50)
+
 		if len(*labels) == 0 {
 			podList = listAllPods()
 		} else {
 			for _, l := range *labels {
+				pterm.Info.Printf("Getting Pods with label %s\n\n", pterm.Green(l))
 				podList.Items = append(podList.Items, findPodByLabel(l).Items...)
 			}
 		}
 
-		var monitoredPods []string
-		var podsChannel = make(chan v1.Pod, 10)
-
-		for _, pod := range podList.Items {
-			addPodToMonitor(pod, &monitoredPods, &podsChannel)
-		}
-
-		fmt.Printf("Pods queued: %d\n", len(podsChannel))
+		fmt.Printf("Getting logs for %d Pod(s)\n", len(podList.Items))
+		addPodsToMonitor(podList, &monitoredPods, &podsChannel)
 
 		// process pods
 		wg.Add(1)
-		go func() {
-			defer wg.Done()
-
-			for p := range podsChannel {
-
-				fmt.Printf("Processing Pod: %s\n", p.Name)
-				fmt.Printf("pod remaining: %d\n", len(podsChannel))
-
-				getPodLogsV2(p, getLopOpts())
-
-			}
-
-		}()
-
-		// close the channel after 10 seconds
-		//wg.Add(1)
-		// go func(wg *sync.WaitGroup) {
-		//	defer wg.Done()
-		//
-		//	time.Sleep(10 * time.Second)
-		//	fmt.Printf("DONE\n Closing channel\n")
-		//	close(podsChannel)
-		//}(&wg)
-
-		//constant monitoring
-		//wg.Add(1)
-		//go func(wg *sync.WaitGroup) {
-		//	defer wg.Done()
-		//	time.Sleep(3 * time.Second)
-		//	fmt.Printf("ADDING PODS\n")
-		//	addPodToMonitor(podList.Items[0], &monitoredPods, &podsChannel)
-		//}(&wg)
+		go processPods(&podsChannel, &wg)
 
 		//logFiles := getPodLogs(podList, getLopOpts())
 		if *follow {
+			wg.Add(1)
+			go checkNewPods(&monitoredPods, &podsChannel, &wg)
+
 			// press a key to terminate the process
-			go func() {
-				for {
-					time.Sleep(3 * time.Second)
-					fmt.Printf("CHECKING NEW PODS\n")
-					checkNewPods(&monitoredPods, &podsChannel)
-				}
-			}()
 			pressKeyToExit()
 		} else {
 			close(podsChannel) // read only channel
@@ -570,25 +536,54 @@ It is designed to be fast and efficient, and can get logs from multiple Pods/Con
 	},
 }
 
-func checkNewPods(monitoredPods *[]string, podsChannel *chan v1.Pod) {
-	for _, l := range *labels {
-		for _, p := range findPodByLabel(l).Items {
-			if p.Status.Phase == v1.PodRunning {
-				addPodToMonitor(p, monitoredPods, podsChannel)
-			}
-		}
+func processPods(podsChannel *chan v1.Pod, wg *sync.WaitGroup) {
+	defer wg.Done()
+	for p := range *podsChannel {
+		//pterm.Info.Printf("Processing Pod: %s\n Remaining: %d", p.Name, len(podsChannel))
+		getPodLogsV2(p, getLopOpts())
 	}
 }
 
-func addPodToMonitor(pod v1.Pod, monitoredPods *[]string, podsChannel *chan v1.Pod) {
-	//check if pod is already being monitored
-	if !slices.Contains(*monitoredPods, pod.Name) {
-		fmt.Printf("Adding Pod: %s\n", pod.Name)
-		*monitoredPods = append(*monitoredPods, pod.Name)
-		*podsChannel <- pod
-		return
+func processLogFiles() {
+
+}
+
+func checkNewPods(monitoredPods *[]string, podsChannel *chan v1.Pod, wg *sync.WaitGroup) {
+	defer wg.Done()
+	tick := time.NewTicker(3 * time.Second)
+	defer tick.Stop()
+	for {
+		<-tick.C
+		var podList v1.PodList
+
+		if *allPods {
+			podList = kGetAllPods(*namespace)
+		} else if len(*labels) > 0 {
+			for _, l := range *labels {
+				podList.Items = append(podList.Items, findPodByLabel(l).Items...)
+			}
+		} else {
+			return
+		}
+
+		addPodsToMonitor(podList, monitoredPods, podsChannel)
 	}
-	fmt.Printf("Pod %s already being monitored\n", pod.Name)
+}
+
+func addPodsToMonitor(podList v1.PodList, monitoredPods *[]string, podsChannel *chan v1.Pod) {
+
+	for _, pod := range podList.Items {
+		if pod.Status.Phase == v1.PodRunning {
+			//check if pod is already being monitored
+			if !slices.Contains(*monitoredPods, pod.Name) {
+				pterm.Info.Printf("Found Pod: %s\n", pterm.Green(pod.Name))
+				*monitoredPods = append(*monitoredPods, pod.Name)
+				*podsChannel <- pod
+			}
+		}
+	}
+
+	//fmt.Printf("Pod %s already being monitored\n", pod.Name)
 }
 
 // Execute is the entry point for the command
