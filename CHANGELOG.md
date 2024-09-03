@@ -1,5 +1,10 @@
 # Changelog
 
+## [v1.1.21] - 2024-09-03
+### :bug: Bug Fixes
+- [`10b3d5b`](https://github.com/rogosprojects/klogs/commit/10b3d5bed1e223730a298fe93affad253acf9f41) - fix: warn if stream ends prematurely *(commit by [@rogosprojects](https://github.com/rogosprojects))*
+
+
 ## [v1.1.20] - 2024-09-01
 ### :sparkles: New Features
 - [`d728420`](https://github.com/rogosprojects/klogs/commit/d7284205919d3159027238d93403b3f15b79b2e2) - print current kube context *(commit by [@rogosprojects](https://github.com/rogosprojects))*
@@ -80,3 +85,4 @@ Initial public release
 [v1.1.17]: https://github.com/rogosprojects/klogs/compare/v1.1.16...v1.1.17
 [v1.1.18]: https://github.com/rogosprojects/klogs/compare/v1.1.17...v1.1.18
 [v1.1.20]: https://github.com/rogosprojects/klogs/compare/v1.1.19...v1.1.20
+[v1.1.21]: https://github.com/rogosprojects/klogs/compare/v1.1.20...v1.1.21
