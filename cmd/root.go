@@ -4,32 +4,38 @@ Package cmd is the entry point for the command line tool. It defines the root co
 package cmd
 
 import (
+	"atomicgo.dev/keyboard/keys"
 	"bufio"
 	"context"
 	"fmt"
+	"github.com/gdamore/tcell/v2"
 	"github.com/mattn/go-tty"
+	"github.com/pterm/pterm"
+	"github.com/pterm/pterm/putils"
+	"github.com/rivo/tview"
+	"github.com/spf13/cobra"
 	"io"
+	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
-
-	"atomicgo.dev/keyboard/keys"
-	"github.com/pterm/pterm"
-	"github.com/pterm/pterm/putils"
-	"github.com/spf13/cobra"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 var (
 	// BuildVersion is the version of the build, passed in by the build system
 	BuildVersion = "development"
+)
+
+var (
+	app   *tview.Application
+	table *tview.Table
 )
 
 // Flags input
@@ -275,6 +281,33 @@ func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) []string {
 
 	return logFiles
 }
+func printLogSizeView(logFile []string) {
+
+	app.QueueUpdateDraw(func() {
+
+		var previousPod string
+		for i, log := range logFile {
+			_log := filepath.Base(log)
+			fileInfo, err := os.Stat(log)
+			if err != nil {
+				continue
+			}
+			podName, containerName := strings.Split(_log, fileNameSeparator)[0], strings.Split(_log, fileNameSeparator)[1]
+			containerName = strings.TrimSuffix(containerName, ".log")
+
+			podNameLabelColor := tcell.ColorDefault
+			if podName == previousPod {
+				podNameLabelColor = tcell.ColorGray
+			}
+			table.SetCell(i+1, 0, tview.NewTableCell(podName).SetTextColor(podNameLabelColor))
+			table.SetCellSimple(i+1, 1, containerName)
+			table.SetCellSimple(i+1, 2, convertBytes(fileInfo.Size()))
+
+			//tableData = append(tableData, []string{podNameLabelColor, containerName, convertBytes(fileInfo.Size())})
+			previousPod = podName
+		}
+	})
+}
 
 func printLogSize(logFile []string) {
 	if (len(logFile)) == 0 {
@@ -404,8 +437,8 @@ func pressKeyToExit() {
 	defer t.Close()
 
 	// race condition with spinner: known issue, we don't care
-	spinnerLog, _ := pterm.DefaultSpinner.WithSequence(".  ", ".. ", ".|.", " ..", "  .").WithRemoveWhenDone(true).Start(pterm.Sprintf("Press %s to stop streaming logs in %s", pterm.Green("q"), pterm.Green(*logPath)))
-	defer spinnerLog.Stop()
+	//spinnerLog, _ := pterm.DefaultSpinner.WithSequence(".  ", ".. ", ".|.", " ..", "  .").WithRemoveWhenDone(true).Start(pterm.Sprintf("Press %s to stop streaming logs in %s", pterm.Green("q"), pterm.Green(*logPath)))
+	//defer spinnerLog.Stop()
 
 	for {
 		key, err := t.ReadRune()
@@ -415,6 +448,8 @@ func pressKeyToExit() {
 		// if pressed q or Q
 		if key == 113 || key == 81 {
 			//pterm.Info.Printfln("Exiting")
+			app.Stop()
+
 			break
 		}
 	}
@@ -462,6 +497,38 @@ It is designed to be fast and efficient, and can get logs from multiple Pods/Con
 
 		logFiles := getPodLogs(podList, getLopOpts())
 
+		// print table
+		app = tview.NewApplication()
+		table = tview.NewTable().
+			SetBorders(true)
+
+		table.SetCell(0, 0, tview.NewTableCell("Pod").SetAlign(tview.AlignCenter).SetSelectable(false))
+		table.SetCell(0, 1, tview.NewTableCell("Container").SetAlign(tview.AlignCenter).SetSelectable(false))
+		table.SetCell(0, 2, tview.NewTableCell("Size").SetAlign(tview.AlignCenter).SetSelectable(false))
+
+		if (len(logFiles)) == 0 {
+			pterm.Error.Printfln("No logs saved")
+			return
+		}
+
+		wg.Add(1)
+		go func() {
+			go func() {
+
+				if err := app.SetRoot(table, true).EnableMouse(false).Run(); err != nil {
+					panic(err)
+				}
+			}()
+			defer wg.Done()
+			for {
+				time.Sleep(1 * time.Second)
+				printLogSizeView(logFiles)
+				if !*follow {
+					break
+				}
+			}
+		}()
+
 		if *follow && len(logFiles) > 0 {
 			// press a key to terminate the process
 			pressKeyToExit()
@@ -469,8 +536,8 @@ It is designed to be fast and efficient, and can get logs from multiple Pods/Con
 			// wait for all goroutines to finish
 			wg.Wait()
 		}
-
-		printLogSize(logFiles)
+		//app.Stop()
+		//printLogSize(logFiles)
 	},
 }
 
