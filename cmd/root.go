@@ -7,12 +7,13 @@ import (
 	"bufio"
 	"context"
 	"fmt"
-	"github.com/mattn/go-tty"
+	"github.com/gdamore/tcell/v2"
+	"github.com/rivo/tview"
 	"io"
 	"k8s.io/client-go/util/homedir"
 	"os"
 	"path/filepath"
-	"slices"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -47,6 +48,12 @@ var (
 	allPods, initContainer *bool
 	defaultLogPath         = "logs/" + time.Now().Format("2006-01-02T15-04")
 	wg                     sync.WaitGroup
+	logFiles               = make(map[string]*os.File)
+	mu                     sync.Mutex
+	app                    *tview.Application
+	monitoredPods          = make(map[string]*tview.TreeView)
+	liveBox                = tview.NewTextView()
+	podsChannel            = make(chan v1.Pod, 50)
 )
 
 const (
@@ -87,20 +94,32 @@ func configClient() {
 	}
 }
 
-// configNamespace configures the namespace to use
-func configNamespace() {
+// getClusterInfo configures the namespace to use
+func getClusterInfo(kubeconfig string) (ns string, ctx string) {
+
+	config, err := clientcmd.LoadFromFile(kubeconfig)
+	if err != nil {
+		panic(err.Error())
+	}
+
 	if *namespace == "" {
-		*namespace = getCurrentNamespace(*kubeconfig)
+		*namespace = config.Contexts[config.CurrentContext].Namespace
+
+		if len(ns) == 0 {
+			ns = "default"
+		}
 	}
 
 	// check if namespace exists
-	_, err := client.CoreV1().Namespaces().Get(context.TODO(), *namespace, metav1.GetOptions{})
+	_, err = client.CoreV1().Namespaces().Get(context.TODO(), *namespace, metav1.GetOptions{})
 	if err != nil {
 		pterm.Warning.Printfln("Namespace %s not found", *namespace)
 		listNamespaces()
 	}
-
+	pterm.Info.Printfln("Using Context %s", pterm.Green(config.CurrentContext))
 	pterm.Info.Printfln("Using Namespace %s", pterm.Green(*namespace))
+
+	return *namespace, config.CurrentContext
 }
 
 // listNamespaces lists all namespaces in the cluster
@@ -186,22 +205,6 @@ func showInteractivePodSelect(podNames []string) []string {
 	return selectedPods
 }
 
-// Get the default namespace specified in the KUBECONFIG file current context
-func getCurrentNamespace(kubeconfig string) string {
-
-	config, err := clientcmd.LoadFromFile(kubeconfig)
-	if err != nil {
-		panic(err.Error())
-	}
-	ns := config.Contexts[config.CurrentContext].Namespace
-
-	if len(ns) == 0 {
-		ns = "default"
-	}
-	pterm.Info.Printfln("Using Context %s", pterm.Green(config.CurrentContext))
-	return ns
-}
-
 // getLopOpts returns the Kubernetes option for logs
 func getLopOpts() v1.PodLogOptions {
 	var logOpts v1.PodLogOptions
@@ -226,18 +229,14 @@ func getLopOpts() v1.PodLogOptions {
 }
 
 func getPodLogsV2(pod v1.Pod, logOpts v1.PodLogOptions) {
-	/*	if len(pods.Items) == 0 {
-		return []string{}
-	}*/
-	var _podTree = pterm.TreeNode{
-		Text: pterm.Info.
-			WithPrefix(pterm.Prefix{Text: pod.Name}).
-			WithMessageStyle(pterm.DefaultBasicText.Style).
-			Sprintf(pterm.Blue(" [Pod]")),
-	}
 
 	if *initContainer {
 		for _, initC := range pod.Spec.InitContainers {
+			if _, ok := monitoredPods[pod.Name]; !ok {
+				continue
+			}
+			monitoredPods[pod.Name].GetRoot().AddChild(tview.NewTreeNode(initC.Name))
+			//fmt.Printf("Streamed logs for Pod: %s, Init Container: %s\n", pod.Name, initC.Name)
 
 			logFile := createLogFile(pod.Name, initC.Name)
 
@@ -245,80 +244,23 @@ func getPodLogsV2(pod v1.Pod, logOpts v1.PodLogOptions) {
 			go streamLog(pod, initC, logFile, logOpts)
 		}
 	}
-	var containerTree []pterm.TreeNode
 	for _, container := range pod.Spec.Containers {
-
-		containerTree = append(containerTree, pterm.TreeNode{Text: container.Name})
+		if _, ok := monitoredPods[pod.Name]; !ok {
+			continue
+		}
+		monitoredPods[pod.Name].GetRoot().AddChild(tview.NewTreeNode(container.Name))
 		//fmt.Printf("Streamed logs for Pod: %s, Container: %s\n", pod.Name, container.Name)
 
 		logFile := createLogFile(pod.Name, container.Name)
 
 		wg.Add(1)
 		go streamLog(pod, container, logFile, logOpts)
-		//fmt.Printf("Log file: %s\n", logFile.Name())
 	}
-	_podTree.Children = containerTree
-	pterm.DefaultTree.WithRoot(_podTree).Render()
+
 }
 
-// getPodLogs gets logs for the pods
-func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) []string {
-	if len(pods.Items) == 0 {
-		return []string{}
-	}
-
-	var logFiles []string
-	var trees []*pterm.TreePrinter
-	for i, pod := range pods.Items {
-		var _podTree = pterm.TreeNode{
-			Text: pterm.Info.
-				WithPrefix(pterm.Prefix{Text: pod.Name}).
-				WithMessageStyle(pterm.DefaultBasicText.Style).
-				Sprintf(pterm.Sprintf(pterm.Blue("[Pod #%d]"), i+1)),
-		}
-		var containerTree []pterm.TreeNode
-
-		if *initContainer {
-			for _, initC := range pod.Spec.InitContainers {
-				containerTree = append(containerTree, pterm.TreeNode{Text: initC.Name + pterm.Gray(" [init]")})
-				_podTree.Children = containerTree
-
-				logFile := createLogFile(pod.Name, initC.Name)
-				logFiles = append(logFiles, logFile.Name())
-
-				wg.Add(1)
-				go streamLog(pod, initC, logFile, logOpts)
-			}
-		}
-
-		for _, container := range pod.Spec.Containers {
-			containerTree = append(containerTree, pterm.TreeNode{Text: container.Name})
-			_podTree.Children = containerTree
-
-			logFile := createLogFile(pod.Name, container.Name)
-			logFiles = append(logFiles, logFile.Name())
-
-			wg.Add(1)
-			go streamLog(pod, container, logFile, logOpts)
-		}
-		trees = append(trees, pterm.DefaultTree.WithRoot(_podTree))
-	}
-
-	// Print the tree
-	pterm.Info.Printfln(pterm.Sprintf("Found %s Pod(s) %s Container(s)", pterm.Green(len(pods.Items)), pterm.Green(len(logFiles))))
-	for _, tree := range trees {
-		err := tree.Render()
-		if err != nil {
-			panic(err.Error())
-		}
-	}
-	pterm.Info.Printfln("Acquiring logs 🚀")
-
-	return logFiles
-}
-
-func printLogSize(logFile []string) {
-	if (len(logFile)) == 0 {
+func printLogSize() {
+	if (len(logFiles)) == 0 {
 		pterm.Error.Printfln("No logs saved")
 		return
 	}
@@ -327,13 +269,21 @@ func printLogSize(logFile []string) {
 	tableData := pterm.TableData{{"Pod", "Container", "Size"}}
 
 	var previousPod string
-	for _, log := range logFile {
-		_log := filepath.Base(log)
-		fileInfo, err := os.Stat(log)
+
+	// sort output
+	logNames := make([]string, 0, len(logFiles))
+	for k := range logFiles {
+		logNames = append(logNames, k)
+	}
+	sort.Strings(logNames)
+
+	for k := range logNames {
+		fileName := logNames[k]
+		fileInfo, err := logFiles[fileName].Stat()
 		if err != nil {
 			continue
 		}
-		podName, containerName := strings.Split(_log, fileNameSeparator)[0], strings.Split(_log, fileNameSeparator)[1]
+		podName, containerName := strings.Split(fileName, fileNameSeparator)[0], strings.Split(fileName, fileNameSeparator)[1]
 		containerName = strings.TrimSuffix(containerName, ".log")
 
 		podNameLabelColor := podName
@@ -354,7 +304,11 @@ func streamLog(pod v1.Pod, container v1.Container, logFile *os.File, logOpts v1.
 	defer wg.Done()
 	if *follow {
 		defer func() {
-			pterm.Warning.Printfln("Streaming logs ended prematurely for Pod: %s, Container: %s", pod.Name, container.Name)
+			if _, ok := monitoredPods[pod.Name]; !ok {
+				return
+			}
+			monitoredPods[pod.Name].GetRoot().SetColor(tcell.ColorRed).SetChildren(nil)
+			//pterm.Warning.Printfln("Streaming logs ended prematurely for Pod: %s, Container: %s", pod.Name, container.Name)
 		}()
 	}
 
@@ -365,7 +319,7 @@ func streamLog(pod v1.Pod, container v1.Container, logFile *os.File, logOpts v1.
 	// get logs
 	logs, err := req.Stream(context.Background())
 	if err != nil {
-		pterm.Error.Printfln("Error getting logs for container %s\n%v", container.Name, err)
+		//pterm.Error.Printfln("Error getting logs for container %s\n%v", container.Name, err)
 		return
 	}
 	defer func(logs io.ReadCloser) {
@@ -376,7 +330,6 @@ func streamLog(pod v1.Pod, container v1.Container, logFile *os.File, logOpts v1.
 	}(logs)
 
 	writeLogToDisk(logs, logFile)
-
 }
 
 func createLogFile(podName string, containerName string) *os.File {
@@ -387,11 +340,18 @@ func createLogFile(podName string, containerName string) *os.File {
 		panic(err.Error())
 	}
 	logFilePath := filepath.Join(*logPath, logName)
-	logFile, err := os.Create(logFilePath)
 
+	//if _, err := os.Stat(logFilePath); err == nil {
+	//	// File exists
+	//	fmt.Printf("File %s exists.\n Appending.", logFilePath)
+	//}
+	// If the file doesn't exist, create it, or append to the file
+	logFile, err := os.OpenFile(logFilePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		panic(err.Error())
 	}
+
+	logFiles[logName] = logFile
 
 	return logFile
 }
@@ -428,49 +388,120 @@ func findPodByLabel(label string) v1.PodList {
 		panic(err.Error())
 	}
 
-	// if pods are not found print message
-	if len(pods.Items) == 0 {
-		pterm.Error.Printfln(pterm.Sprintf("No pods found in namespace %s with label %s\n", *namespace, label))
-	}
-
 	return *pods
 }
-
-func pressKeyToExit() {
-	t, errTty := tty.Open()
-	if errTty != nil {
-		panic(errTty)
-	}
-	defer t.Close()
-
-	// race condition with spinner: known issue, we don't care
-	spinnerLog, _ := pterm.DefaultSpinner.WithSequence(".  ", ".. ", ".|.", " ..", "  .").WithRemoveWhenDone(true).Start(pterm.Sprintf("Press %s to stop streaming logs in %s", pterm.Green("q"), pterm.Green(*logPath)))
-	defer spinnerLog.Stop()
-
+func updateMonitoredPodBox(monitoredPodBox *tview.Flex) {
+	startLoopIcon := []string{" 🚀", " 🚀🚀", " 🚀🚀🚀"}
+	i := 0
 	for {
-		key, err := t.ReadRune()
-		if err != nil {
-			panic(err)
-		}
-		// if pressed q or Q
-		if key == 113 || key == 81 {
-			//pterm.Info.Printfln("Exiting")
-			break
+		app.QueueUpdateDraw(func() {
+			monitoredPodBox.Clear()
+
+			if len(monitoredPods) == 0 {
+				monitoredPodBox.AddItem(tview.NewTextView().SetText("No pods being monitored").SetTextColor(tcell.ColorRed), 0, 1, false)
+				return
+			}
+			updatedAt := time.Now().Format("15:04:05")
+			tree := tview.NewTreeView().SetRoot(tview.NewTreeNode(updatedAt + startLoopIcon[i]).SetColor(tcell.ColorGreen))
+
+			// sort output
+			podNames := make([]string, 0, len(monitoredPods))
+			for k := range monitoredPods {
+				podNames = append(podNames, k)
+			}
+			sort.Strings(podNames)
+
+			for _, k := range podNames {
+				if (monitoredPods)[k] == nil {
+					continue
+				}
+				tree.GetRoot().AddChild((monitoredPods)[k].GetRoot())
+				//monitoredPodBox.AddItem((*monitoredPods)[k], 3, 1, false)
+			}
+			for podName, tree := range monitoredPods {
+				if tree.GetRoot().GetColor() == tcell.ColorRed {
+					delete(monitoredPods, podName)
+				} else if tree.GetRoot().GetColor() == tcell.ColorYellow {
+					tree.GetRoot().SetColor(tcell.ColorGreen)
+				} else if tree.GetRoot().GetColor() == tcell.ColorGreen {
+					tree.GetRoot().SetColor(tcell.ColorBlue)
+				}
+			}
+			monitoredPodBox.AddItem(tree, 0, 1, false)
+		})
+		time.Sleep(1 * time.Second)
+		i++
+
+		if i > 2 {
+			i = 0
 		}
 	}
 }
 
+func updateSizeFileBox(logSizeBox *tview.Flex, logFiles *map[string]*os.File) {
+	for {
+		app.QueueUpdateDraw(func() {
+			logSizeBox.Clear()
+
+			if len(*logFiles) == 0 {
+				logSizeBox.AddItem(tview.NewTextView().SetText("No logs saved").SetTextColor(tcell.ColorRed), 0, 1, false)
+				return
+			}
+
+			table := tview.NewTable().
+				SetBorders(false)
+			table.SetCell(0, 0, tview.NewTableCell("Pod").SetSelectable(false).SetTextColor(tcell.ColorBlue))
+			table.SetCell(0, 1, tview.NewTableCell("Container").SetSelectable(false).SetTextColor(tcell.ColorBlue))
+			table.SetCell(0, 2, tview.NewTableCell("Size").SetSelectable(false).SetTextColor(tcell.ColorBlue))
+
+			var previousPod string
+			var cellStart int
+
+			// sort output
+			logNames := make([]string, 0, len(*logFiles))
+			for k := range *logFiles {
+				logNames = append(logNames, k)
+			}
+			sort.Strings(logNames)
+
+			for k := range logNames {
+				fileName := logNames[k]
+				log := (*logFiles)[fileName]
+				fileInfo, err := log.Stat()
+				if err != nil {
+					continue
+				}
+				podName, containerName := strings.Split(fileName, fileNameSeparator)[0], strings.Split(fileName, fileNameSeparator)[1]
+				containerName = strings.TrimSuffix(containerName, ".log")
+
+				color := tcell.ColorWhite
+				if podName == previousPod {
+					color = tcell.ColorGray
+				}
+				table.SetCell(cellStart+1, 0, tview.NewTableCell(podName).SetSelectable(false).SetTextColor(color))
+				table.SetCellSimple(cellStart+1, 1, containerName)
+				table.SetCellSimple(cellStart+1, 2, convertBytes(fileInfo.Size()))
+				cellStart++
+				previousPod = podName
+			}
+
+			logSizeBox.AddItem(table, 0, 1, false)
+
+		})
+		time.Sleep(2 * time.Second)
+	}
+}
 func convertBytes(bytes int64) string {
 	if bytes == 0 {
-		return pterm.Red("0 B")
+		return fmt.Sprintf("0 B")
 	}
 	if bytes < 1024 {
-		return pterm.Sprintf("%d B", bytes)
+		return fmt.Sprintf("%d B", bytes)
 	}
 	if bytes < 1024*1024 {
-		return pterm.Sprintf("%d KB", bytes/1024)
+		return fmt.Sprintf("%d KB", bytes/1024)
 	}
-	return pterm.Sprintf("%d MB", bytes/1024/1024)
+	return fmt.Sprintf("%d MB", bytes/1024/1024)
 }
 
 var rootCmd = &cobra.Command{
@@ -487,16 +518,15 @@ It is designed to be fast and efficient, and can get logs from multiple Pods/Con
 		}
 
 		splashScreen()
-
 		configClient()
-		configNamespace()
+
+		ns, ctx := getClusterInfo(*kubeconfig)
 
 		var podList v1.PodList
-		var monitoredPods []string
-		var podsChannel = make(chan v1.Pod, 50)
 		//var filesChannel = make(chan os.File, 50)
 
 		if len(*labels) == 0 {
+			pterm.Info.Println("Getting all Pods")
 			podList = listAllPods()
 		} else {
 			for _, l := range *labels {
@@ -505,80 +535,107 @@ It is designed to be fast and efficient, and can get logs from multiple Pods/Con
 			}
 		}
 
-		fmt.Printf("Getting logs for %d Pod(s)\n", len(podList.Items))
-		addPodsToMonitor(podList, &monitoredPods, &podsChannel)
+		// start multithreaded goroutines
 
 		// process pods
 		wg.Add(1)
-		go processPods(&podsChannel, &wg)
+		go processPods(&wg)
+		addPodsToMonitor(podList)
 
-		//logFiles := getPodLogs(podList, getLopOpts())
 		if *follow {
-			wg.Add(1)
-			go checkNewPods(&monitoredPods, &podsChannel, &wg)
-
-			// press a key to terminate the process
-			pressKeyToExit()
+			pterm.Info.Printfln("Streaming ON")
+			go checkNewPods(&wg)
+			startTviewApp(ns, ctx)
 		} else {
+			pterm.Info.Printfln("Streaming OFF")
 			close(podsChannel) // read only channel
 			wg.Wait()
-			fmt.Printf("DONE\n Closing channel\n")
+			//fmt.Printf("DONE. Closing channel\n")
 		}
-		//if *follow && len(logFiles) > 0 {
-		//	// press a key to terminate the process
-		//	pressKeyToExit()
-		//} else {
-		//	// wait for all goroutines to finish
-		//	wg.Wait()
-		//}
 
-		//printLogSize(logFiles)
+		printLogSize()
 	},
 }
 
-func processPods(podsChannel *chan v1.Pod, wg *sync.WaitGroup) {
+func startTviewApp(ns string, ctx string) {
+	app = tview.NewApplication()
+	headerBox := tview.NewButton(fmt.Sprintf("[CONTEXT: %s] [NAMESPACE: %s] Hit Enter or Esc to close", ctx, ns)).SetBackgroundColorActivated(tcell.ColorDefault).SetSelectedFunc(func() {
+		app.Stop()
+	}).SetExitFunc(func(key tcell.Key) {
+		app.Stop()
+	})
+	monitoredPodBox := tview.NewFlex()
+
+	monitoredPodBox.SetDirection(tview.FlexRow).
+		SetTitle(" Monitored Pods ").
+		SetBorder(true).
+		SetTitleAlign(tview.AlignCenter).
+		SetTitleColor(tcell.ColorGreen)
+
+	logSizeBox := tview.NewFlex()
+	logSizeBox.SetDirection(tview.FlexRow).
+		SetTitle(" Logs ").
+		SetBorder(true).
+		SetTitleAlign(tview.AlignCenter).
+		SetTitleColor(tcell.ColorGreen)
+
+	go updateMonitoredPodBox(monitoredPodBox)
+	go updateSizeFileBox(logSizeBox, &logFiles)
+
+	grid := tview.NewGrid().
+		SetBorders(false).
+		SetRows(1, 0, 1).
+		SetColumns(60, 0).
+		AddItem(headerBox, 0, 0, 1, 2, 0, 0, true).
+		AddItem(monitoredPodBox, 1, 0, 1, 1, 0, 0, false).
+		AddItem(logSizeBox, 1, 1, 1, 1, 0, 0, false).
+		AddItem(liveBox, 2, 0, 1, 2, 0, 0, false)
+
+	if err := app.SetRoot(grid, true).EnableMouse(false).Run(); err != nil {
+		panic(err)
+	}
+}
+
+func processPods(wg *sync.WaitGroup) {
 	defer wg.Done()
-	for p := range *podsChannel {
-		//pterm.Info.Printf("Processing Pod: %s\n Remaining: %d", p.Name, len(podsChannel))
+	for p := range podsChannel {
+		//fmt.Printf("Processing Pod: %s\n Remaining: %d", p.Name, len(podsChannel))
 		getPodLogsV2(p, getLopOpts())
 	}
 }
 
-func processLogFiles() {
-
-}
-
-func checkNewPods(monitoredPods *[]string, podsChannel *chan v1.Pod, wg *sync.WaitGroup) {
+func checkNewPods(wg *sync.WaitGroup) {
 	defer wg.Done()
-	tick := time.NewTicker(3 * time.Second)
+	tick := time.NewTicker(1 * time.Second)
 	defer tick.Stop()
+
 	for {
 		<-tick.C
-		var podList v1.PodList
 
 		if *allPods {
-			podList = kGetAllPods(*namespace)
+			addPodsToMonitor(kGetAllPods(*namespace))
 		} else if len(*labels) > 0 {
 			for _, l := range *labels {
-				podList.Items = append(podList.Items, findPodByLabel(l).Items...)
+				addPodsToMonitor(findPodByLabel(l))
 			}
 		} else {
 			return
 		}
 
-		addPodsToMonitor(podList, monitoredPods, podsChannel)
 	}
 }
 
-func addPodsToMonitor(podList v1.PodList, monitoredPods *[]string, podsChannel *chan v1.Pod) {
+func addPodsToMonitor(podList v1.PodList) {
 
 	for _, pod := range podList.Items {
 		if pod.Status.Phase == v1.PodRunning {
 			//check if pod is already being monitored
-			if !slices.Contains(*monitoredPods, pod.Name) {
-				pterm.Info.Printf("Found Pod: %s\n", pterm.Green(pod.Name))
-				*monitoredPods = append(*monitoredPods, pod.Name)
-				*podsChannel <- pod
+			if _, ok := (monitoredPods)[pod.Name]; !ok {
+				liveBox.Clear()
+				liveBox.SetText(fmt.Sprintf("Found Pod: %s\n", pod.Name))
+				//fmt.Printf("Found Pod: %s\n", pod.Name)
+				(monitoredPods)[pod.Name] = tview.NewTreeView().SetRoot(tview.NewTreeNode(pod.Name).SetColor(tcell.ColorYellow))
+				podsChannel <- pod
 			}
 		}
 	}

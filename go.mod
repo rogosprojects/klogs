@@ -6,6 +6,7 @@ require (
 	atomicgo.dev/keyboard v0.2.9
 	github.com/mattn/go-tty v0.0.7
 	github.com/pterm/pterm v0.12.79
+	github.com/rivo/tview v0.0.0-20240818110301-fd649dbf1223
 	github.com/spf13/cobra v1.8.1
 	github.com/stretchr/testify v1.9.0
 	k8s.io/api v0.30.3
@@ -19,6 +20,8 @@ require (
 	github.com/containerd/console v1.0.3 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/emicklei/go-restful/v3 v3.11.0 // indirect
+	github.com/gdamore/encoding v1.0.0 // indirect
+	github.com/gdamore/tcell/v2 v2.7.1 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-openapi/jsonpointer v0.19.6 // indirect
 	github.com/go-openapi/jsonreference v0.20.2 // indirect
@@ -34,6 +37,7 @@ require (
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/lithammer/fuzzysearch v1.1.8 // indirect
+	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
