@@ -82,7 +82,6 @@ func updateMonitoredPodBox(monitoredPodBox *tview.Flex) {
 					continue
 				}
 				tree.GetRoot().AddChild((monitoredPods)[k].GetRoot())
-				//monitoredPodBox.AddItem((*monitoredPods)[k], 3, 1, false)
 			}
 			for podName, tree := range monitoredPods {
 				if tree.GetRoot().GetColor() == tcell.ColorRed {
@@ -190,7 +189,7 @@ func addPodsToMonitor(podList v1.PodList) {
 			//check if pod is already being monitored
 			if _, ok := (monitoredPods)[pod.Name]; !ok {
 
-				go updateLiveBox(fmt.Sprintf("Found Pod: %s\n", pod.Name))
+				go updateLiveBox(fmt.Sprintf("Found New Pod: %s\n", pod.Name))
 				(monitoredPods)[pod.Name] = tview.NewTreeView().SetRoot(tview.NewTreeNode(pod.Name).SetColor(tcell.ColorYellow))
 				podsChannel <- pod
 			}
