@@ -9,21 +9,21 @@ import (
 	"strings"
 )
 
-func getPodListByFlags(verbose bool) v1.PodList {
+func getPodListByFlags(enableInteractive bool) v1.PodList {
 	podList := v1.PodList{}
 	if *allPods {
-		if verbose {
+		if enableInteractive {
 			pterm.Info.Println("Getting all Pods")
 		}
 		podList, _ = listAllPods()
 	} else if len(*labels) > 0 {
 		for _, l := range *labels {
-			if verbose {
+			if enableInteractive {
 				pterm.Info.Printf("Getting Pods with label %s\n\n", pterm.Green(l))
 			}
 			podList.Items = append(podList.Items, findPodByLabel(l).Items...)
 		}
-	} else {
+	} else if enableInteractive {
 		podList = interactivePodSelect()
 	}
 	return podList
@@ -64,6 +64,7 @@ func interactivePodSelect() v1.PodList {
 		_podNames = append(_podNames, k)
 	}
 
+	sort.Strings(_podNames)
 	// Create a new interactive multiselect printer with the options
 	// Disable the filter and set the keys for confirming and selecting options
 	printer := pterm.DefaultInteractiveMultiselect.
