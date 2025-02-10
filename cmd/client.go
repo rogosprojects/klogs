@@ -25,7 +25,7 @@ func configClient() {
 	// use the current context in kubeconfig
 	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
 	if err != nil {
-		pterm.Fatal.Printfln("kubeconfig error while reading %s\nPlease provide a valid kubeconfig file with \"--kubeconfig <file_path>\"", *kubeconfig)
+		pterm.Fatal.Printfln("%s\n\nError while reading kubeconfig file: %s\nPlease provide a valid kubeconfig file with \"--kubeconfig <file_path>\"\n", err, *kubeconfig)
 	}
 	config.Burst = 100
 
