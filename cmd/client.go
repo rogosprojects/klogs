@@ -135,10 +135,14 @@ func getPodLogsV2(pod v1.Pod, logOpts v1.PodLogOptions) {
 
 	if *initContainer {
 		for _, initC := range pod.Spec.InitContainers {
-			if _, ok := monitoredPods[pod.Name]; !ok {
+			mu.Lock()
+			treeView, ok := monitoredPods[pod.Name]
+			if !ok {
+				mu.Unlock()
 				continue
 			}
-			monitoredPods[pod.Name].GetRoot().AddChild(tview.NewTreeNode(initC.Name))
+			treeView.GetRoot().AddChild(tview.NewTreeNode(initC.Name))
+			mu.Unlock()
 			//fmt.Printf("Streamed logs for Pod: %s, Init Container: %s\n", pod.Name, initC.Name)
 
 			logFile := createLogFile(pod.Name, initC.Name)
@@ -148,10 +152,14 @@ func getPodLogsV2(pod v1.Pod, logOpts v1.PodLogOptions) {
 		}
 	}
 	for _, container := range pod.Spec.Containers {
-		if _, ok := monitoredPods[pod.Name]; !ok {
+		mu.Lock()
+		treeView, ok := monitoredPods[pod.Name]
+		if !ok {
+			mu.Unlock()
 			continue
 		}
-		monitoredPods[pod.Name].GetRoot().AddChild(tview.NewTreeNode(container.Name))
+		treeView.GetRoot().AddChild(tview.NewTreeNode(container.Name))
+		mu.Unlock()
 		//fmt.Printf("Streamed logs for Pod: %s, Container: %s\n", pod.Name, container.Name)
 
 		logFile := createLogFile(pod.Name, container.Name)

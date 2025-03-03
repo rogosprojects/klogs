@@ -1,12 +1,14 @@
 package cmd
 
 import (
-	"atomicgo.dev/keyboard/keys"
 	"fmt"
-	"github.com/pterm/pterm"
-	v1 "k8s.io/api/core/v1"
+	"os"
 	"sort"
 	"strings"
+
+	"atomicgo.dev/keyboard/keys"
+	"github.com/pterm/pterm"
+	v1 "k8s.io/api/core/v1"
 )
 
 func getPodListByFlags(enableInteractive bool) v1.PodList {
@@ -92,25 +94,38 @@ func interactivePodSelect() v1.PodList {
 }
 
 func footer() {
-	if (len(logFiles)) == 0 {
+	mu.Lock()
+	fileCount := len(logFiles)
+	if fileCount == 0 {
+		mu.Unlock()
 		pterm.Error.Printfln("No logs saved")
 		return
 	}
+
+	// Make a local copy of logFiles to minimize lock time
+	logNamesCopy := make([]string, 0, fileCount)
+	logFilesCopy := make(map[string]*os.File, fileCount)
+	for k, v := range logFiles {
+		logNamesCopy = append(logNamesCopy, k)
+		logFilesCopy[k] = v
+	}
+
+	// Copy footer text
+	footerTextCopy := make([]string, len(footerText))
+	copy(footerTextCopy, footerText)
+	mu.Unlock()
+
 	pterm.Info.Printfln("Logs saved to " + pterm.Green(*logPath))
 
 	tableData := pterm.TableData{{"Pod", "Container", "Size"}}
 
 	// sort output
-	logNames := make([]string, 0, len(logFiles))
-	for k := range logFiles {
-		logNames = append(logNames, k)
-	}
-	sort.Strings(logNames)
+	sort.Strings(logNamesCopy)
 
 	var previousPod string
-	for k := range logNames {
-		fileName := logNames[k]
-		fileInfo, err := logFiles[fileName].Stat()
+	for k := range logNamesCopy {
+		fileName := logNamesCopy[k]
+		fileInfo, err := logFilesCopy[fileName].Stat()
 		if err != nil {
 			continue
 		}
@@ -129,9 +144,9 @@ func footer() {
 		pterm.Error.Printfln("Error rendering table")
 	}
 
-	if len(footerText) > 0 {
+	if len(footerTextCopy) > 0 {
 		fmt.Println("Please note:")
-		for _, line := range footerText {
+		for _, line := range footerTextCopy {
 			fmt.Println(line)
 		}
 	}

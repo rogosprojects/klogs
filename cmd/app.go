@@ -63,26 +63,40 @@ func updateMonitoredPodBox(monitoredPodBox *tview.Flex) {
 		app.QueueUpdateDraw(func() {
 			monitoredPodBox.Clear()
 
-			if len(monitoredPods) == 0 {
+			mu.Lock()
+			podCount := len(monitoredPods)
+			if podCount == 0 {
+				mu.Unlock()
 				monitoredPodBox.AddItem(tview.NewTextView().SetText("No pods being monitored").SetTextColor(tcell.ColorRed), 0, 1, false)
 				return
 			}
+			
 			updatedAt := fmt.Sprintf("[%s] Monitoring %s", time.Now().Format("15:04:05"), startLoopIcon[i])
 			tree := tview.NewTreeView().SetRoot(tview.NewTreeNode(updatedAt).SetColor(tcell.ColorGreen))
 
 			// sort output
-			podNames := make([]string, 0, len(monitoredPods))
+			podNames := make([]string, 0, podCount)
 			for k := range monitoredPods {
 				podNames = append(podNames, k)
 			}
+			
+			// Make a local copy of the needed data to minimize lock time
+			podsToProcess := make(map[string]*tview.TreeView, podCount)
+			for k, v := range monitoredPods {
+				podsToProcess[k] = v
+			}
+			mu.Unlock()
+			
 			sort.Strings(podNames)
 
 			for _, k := range podNames {
-				if (monitoredPods)[k] == nil {
+				if podsToProcess[k] == nil {
 					continue
 				}
-				tree.GetRoot().AddChild((monitoredPods)[k].GetRoot())
+				tree.GetRoot().AddChild(podsToProcess[k].GetRoot())
 			}
+			
+			mu.Lock()
 			for podName, tree := range monitoredPods {
 				if tree.GetRoot().GetColor() == tcell.ColorRed {
 					delete(monitoredPods, podName)
@@ -92,6 +106,8 @@ func updateMonitoredPodBox(monitoredPodBox *tview.Flex) {
 					tree.GetRoot().SetColor(tcell.ColorBlue)
 				}
 			}
+			mu.Unlock()
+			
 			monitoredPodBox.AddItem(tree, 0, 1, false)
 		})
 		i++
@@ -115,10 +131,22 @@ func updateSizeFileBox(logSizeBox *tview.Flex, logFiles *map[string]*os.File) {
 		app.QueueUpdateDraw(func() {
 			logSizeBox.Clear()
 
-			if len(*logFiles) == 0 {
+			mu.Lock()
+			fileCount := len(*logFiles)
+			if fileCount == 0 {
+				mu.Unlock()
 				logSizeBox.AddItem(tview.NewTextView().SetText("No logs saved").SetTextColor(tcell.ColorRed), 0, 1, false)
 				return
 			}
+
+			// Make a local copy of logFiles to minimize lock time
+			logNamesCopy := make([]string, 0, fileCount)
+			logFilesCopy := make(map[string]*os.File, fileCount)
+			for k, v := range *logFiles {
+				logNamesCopy = append(logNamesCopy, k)
+				logFilesCopy[k] = v
+			}
+			mu.Unlock()
 
 			table := tview.NewTable().
 				SetBorders(false)
@@ -130,15 +158,11 @@ func updateSizeFileBox(logSizeBox *tview.Flex, logFiles *map[string]*os.File) {
 			var cellStart int
 
 			// sort output
-			logNames := make([]string, 0, len(*logFiles))
-			for k := range *logFiles {
-				logNames = append(logNames, k)
-			}
-			sort.Strings(logNames)
+			sort.Strings(logNamesCopy)
 
-			for k := range logNames {
-				fileName := logNames[k]
-				log := (*logFiles)[fileName]
+			for k := range logNamesCopy {
+				fileName := logNamesCopy[k]
+				log := logFilesCopy[fileName]
 				fileInfo, err := log.Stat()
 				if err != nil {
 					continue
@@ -187,11 +211,15 @@ func addPodsToMonitor(podList v1.PodList) {
 	for _, pod := range podList.Items {
 		if pod.Status.Phase == v1.PodRunning {
 			//check if pod is already being monitored
-			if _, ok := (monitoredPods)[pod.Name]; !ok {
-
+			mu.Lock()
+			_, exists := monitoredPods[pod.Name]
+			if !exists {
 				go updateLiveBox(fmt.Sprintf("Found New Pod: %s\n", pod.Name))
-				(monitoredPods)[pod.Name] = tview.NewTreeView().SetRoot(tview.NewTreeNode(pod.Name).SetColor(tcell.ColorYellow))
+				monitoredPods[pod.Name] = tview.NewTreeView().SetRoot(tview.NewTreeNode(pod.Name).SetColor(tcell.ColorYellow))
+				mu.Unlock()
 				podsChannel <- pod
+			} else {
+				mu.Unlock()
 			}
 		}
 	}
@@ -199,10 +227,17 @@ func addPodsToMonitor(podList v1.PodList) {
 }
 
 func updateLiveBox(text string) {
-	liveBox.SetText(text).SetTextAlign(tview.AlignCenter)
+	if app == nil {
+		return // Skip if app is not initialized
+	}
+	app.QueueUpdateDraw(func() {
+		liveBox.SetText(text).SetTextAlign(tview.AlignCenter)
+	})
 	time.Sleep(5 * time.Second)
 	//clear liveBox if text is the same
-	if liveBox.GetText(false) == text {
-		liveBox.Clear()
-	}
+	app.QueueUpdateDraw(func() {
+		if liveBox.GetText(false) == text {
+			liveBox.Clear()
+		}
+	})
 }

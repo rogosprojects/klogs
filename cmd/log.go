@@ -24,7 +24,9 @@ func createLogFile(podName string, containerName string) *os.File {
 
 	if _, err := os.Stat(logFilePath); err == nil {
 		// File exists
+		mu.Lock()
 		footerText = append(footerText, pterm.Warning.Sprintf("File %s exists. Appending.", logFilePath))
+		mu.Unlock()
 	}
 
 	// If the file doesn't exist, create it, or append to the file
@@ -33,7 +35,9 @@ func createLogFile(podName string, containerName string) *os.File {
 		panic(err.Error())
 	}
 
+	mu.Lock()
 	logFiles[logName] = logFile
+	mu.Unlock()
 
 	return logFile
 }
@@ -61,11 +65,14 @@ func streamLog(pod v1.Pod, container v1.Container, logFile *os.File, logOpts v1.
 	defer wg.Done()
 	if *follow {
 		defer func() {
+			mu.Lock()
 			if _, ok := monitoredPods[pod.Name]; !ok {
+				mu.Unlock()
 				return
 			}
 			monitoredPods[pod.Name].GetRoot().SetColor(tcell.ColorRed).SetChildren(nil)
 			footerText = append(footerText, pterm.Warning.Sprintf("[%s] Streaming logs ended prematurely for\n\tPod: %s\n\tContainer: %s", time.Now().Format("15-04-01"), pod.Name, container.Name))
+			mu.Unlock()
 			//pterm.Warning.Printfln("Streaming logs ended prematurely for Pod: %s, Container: %s", pod.Name, container.Name)
 		}()
 	}
