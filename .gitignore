@@ -1,6 +1,7 @@
 # Any logs
 **/*.log
 logs/*
+*.ignore
 
 # Compiled binary files
 *.out

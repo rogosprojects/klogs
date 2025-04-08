@@ -4,27 +4,16 @@ Package cmd is the entry point for the command line tool. It defines the root co
 package cmd
 
 import (
-	"bufio"
-	"context"
-	"fmt"
-	"github.com/mattn/go-tty"
-	"io"
-	"k8s.io/client-go/util/homedir"
+	"github.com/rivo/tview"
 	"os"
-	"path/filepath"
-	"strings"
 	"sync"
 	"time"
 
-	"atomicgo.dev/keyboard/keys"
 	"github.com/pterm/pterm"
 	"github.com/pterm/pterm/putils"
 	"github.com/spf13/cobra"
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 var (
@@ -46,10 +35,21 @@ var (
 	allPods, initContainer *bool
 	defaultLogPath         = "logs/" + time.Now().Format("2006-01-02T15-04")
 	wg                     sync.WaitGroup
+	logFiles               = make(map[string]*os.File)
+	mu                     sync.Mutex
+	app                    *tview.Application
+	monitoredPods          = make(map[string]*tview.TreeView)
+	liveBox                = tview.NewTextView()
+	podsChannel            = make(chan v1.Pod, 50)
+	kubeCtx                string
+	footerText             []string
 )
 
 const (
-	fileNameSeparator = "__"
+	fileNameSeparator         = "__"
+	checkNewPodsFreq          = 3 * time.Second
+	updateMonitoredPodBoxFreq = 1 * time.Second
+	updateSizeFileBoxFreq     = 3 * time.Second
 )
 
 // splashScreen prints the splash screen!
@@ -65,374 +65,6 @@ func splashScreen() {
 
 }
 
-// configClient creates a new Kubernetes client
-func configClient() {
-
-	if home := homedir.HomeDir(); home != "" && *kubeconfig == "" {
-		*kubeconfig = filepath.Join(home, ".kube", "config")
-	}
-
-	// use the current context in kubeconfig
-	config, err := clientcmd.BuildConfigFromFlags("", *kubeconfig)
-	if err != nil {
-		pterm.Fatal.Printfln("kubeconfig error while reading %s\nPlease provide a valid kubeconfig file with \"--kubeconfig <file_path>\"", *kubeconfig)
-	}
-	config.Burst = 100
-
-	// create the client
-	client, err = kubernetes.NewForConfig(config)
-	if err != nil {
-		panic(err.Error())
-	}
-}
-
-// configNamespace configures the namespace to use
-func configNamespace() {
-	if *namespace == "" {
-		*namespace = getCurrentNamespace(*kubeconfig)
-	}
-
-	// check if namespace exists
-	_, err := client.CoreV1().Namespaces().Get(context.TODO(), *namespace, metav1.GetOptions{})
-	if err != nil {
-		pterm.Warning.Printfln("Namespace %s not found", *namespace)
-		listNamespaces()
-	}
-
-	pterm.Info.Printfln("Using Namespace %s", pterm.Green(*namespace))
-}
-
-// listNamespaces lists all namespaces in the cluster
-func listNamespaces() {
-	// get namespaces and prompt user to select one
-	namespaces, err := client.CoreV1().Namespaces().List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		panic(err.Error())
-	}
-	var ns []string
-	for _, n := range namespaces.Items {
-		ns = append(ns, n.Name)
-	}
-
-	// Use PTerm's interactive select feature to present the options to the user and capture their selection
-	// The Show() method displays the options and waits for the user's input
-	*namespace, _ = pterm.DefaultInteractiveSelect.
-		WithOptions(ns).
-		WithDefaultText("Select a Namespace").
-		Show()
-}
-
-// listAllPods lists all the ready pods in the namespace
-func listAllPods() v1.PodList {
-	var _podList v1.PodList
-	pods, err := client.CoreV1().Pods(*namespace).List(context.TODO(), metav1.ListOptions{})
-	if err != nil {
-		panic(err.Error())
-	}
-
-	var podMap = make(map[string]v1.Pod)
-	var podNames []string
-	for _, pod := range pods.Items {
-		// is the pod ready?
-		for _, condition := range pod.Status.Conditions {
-			if condition.Type == v1.PodReady && condition.Status == v1.ConditionTrue {
-				podMap[pod.Name] = pod
-				podNames = append(podNames, pod.Name)
-				break
-			}
-		}
-	}
-
-	if len(podNames) == 0 {
-		pterm.Error.Printfln("No pods found in namespace %s", *namespace)
-		return _podList
-	}
-
-	if !*allPods {
-		podNames = showInteractivePodSelect(podNames)
-		if len(podNames) == 0 {
-			pterm.Error.Printfln("No pods selected")
-			return _podList
-		}
-	}
-
-	// collect info only for the selected pods
-	for _, podName := range podNames {
-		_podList.Items = append(_podList.Items, podMap[podName])
-	}
-	return _podList
-}
-
-// showInteractivePodSelect shows an interactive multiselect printer with the pod names
-func showInteractivePodSelect(podNames []string) []string {
-	// Create a new interactive multiselect printer with the options
-	// Disable the filter and set the keys for confirming and selecting options
-	printer := pterm.DefaultInteractiveMultiselect.
-		WithOptions(podNames).
-		WithFilter(false).
-		WithKeyConfirm(keys.Enter).
-		WithKeySelect(keys.Space).
-		WithMaxHeight(15).
-		WithDefaultText("Select Pods to get logs")
-
-	// Show the interactive multiselect and get the selected options
-	selectedPods, _ := printer.Show()
-
-	return selectedPods
-}
-
-// Get the default namespace specified in the KUBECONFIG file current context
-func getCurrentNamespace(kubeconfig string) string {
-
-	config, err := clientcmd.LoadFromFile(kubeconfig)
-	if err != nil {
-		panic(err.Error())
-	}
-	ns := config.Contexts[config.CurrentContext].Namespace
-
-	if len(ns) == 0 {
-		ns = "default"
-	}
-	pterm.Info.Printfln("Using Context %s", pterm.Green(config.CurrentContext))
-	return ns
-}
-
-// getLopOpts returns the Kubernetes option for logs
-func getLopOpts() v1.PodLogOptions {
-	var logOpts v1.PodLogOptions
-	// Since
-	if *since != "" {
-		// After
-		duration, err := time.ParseDuration(*since)
-		if err != nil {
-			panic(err.Error())
-		}
-		s := int64(duration.Seconds())
-		logOpts.SinceSeconds = &s
-	}
-	// Tail
-	if *tail != -1 {
-		logOpts.TailLines = tail
-	}
-	// Follow
-	logOpts.Follow = *follow
-
-	return logOpts
-}
-
-// getPodLogs gets logs for the pods
-func getPodLogs(pods v1.PodList, logOpts v1.PodLogOptions) []string {
-	if len(pods.Items) == 0 {
-		return []string{}
-	}
-
-	var logFiles []string
-	var trees []*pterm.TreePrinter
-	for i, pod := range pods.Items {
-		var _podTree = pterm.TreeNode{
-			Text: pterm.Info.
-				WithPrefix(pterm.Prefix{Text: pod.Name}).
-				WithMessageStyle(pterm.DefaultBasicText.Style).
-				Sprintf(pterm.Sprintf(pterm.Blue("[Pod #%d]"), i+1)),
-		}
-		var containerTree []pterm.TreeNode
-
-		if *initContainer {
-			for _, initC := range pod.Spec.InitContainers {
-				containerTree = append(containerTree, pterm.TreeNode{Text: initC.Name + pterm.Gray(" [init]")})
-				_podTree.Children = containerTree
-
-				logFile := createLogFile(pod.Name, initC.Name)
-				logFiles = append(logFiles, logFile.Name())
-
-				wg.Add(1)
-				go streamLog(pod, initC, logFile, logOpts)
-			}
-		}
-
-		for _, container := range pod.Spec.Containers {
-			containerTree = append(containerTree, pterm.TreeNode{Text: container.Name})
-			_podTree.Children = containerTree
-
-			logFile := createLogFile(pod.Name, container.Name)
-			logFiles = append(logFiles, logFile.Name())
-
-			wg.Add(1)
-			go streamLog(pod, container, logFile, logOpts)
-		}
-		trees = append(trees, pterm.DefaultTree.WithRoot(_podTree))
-	}
-
-	// Print the tree
-	pterm.Info.Printfln(pterm.Sprintf("Found %s Pod(s) %s Container(s)", pterm.Green(len(pods.Items)), pterm.Green(len(logFiles))))
-	for _, tree := range trees {
-		err := tree.Render()
-		if err != nil {
-			panic(err.Error())
-		}
-	}
-	pterm.Info.Printfln("Acquiring logs 🚀")
-
-	return logFiles
-}
-
-func printLogSize(logFile []string) {
-	if (len(logFile)) == 0 {
-		pterm.Error.Printfln("No logs saved")
-		return
-	}
-	pterm.Info.Printfln("Logs saved to " + pterm.Green(*logPath))
-
-	tableData := pterm.TableData{{"Pod", "Container", "Size"}}
-
-	var previousPod string
-	for _, log := range logFile {
-		_log := filepath.Base(log)
-		fileInfo, err := os.Stat(log)
-		if err != nil {
-			continue
-		}
-		podName, containerName := strings.Split(_log, fileNameSeparator)[0], strings.Split(_log, fileNameSeparator)[1]
-		containerName = strings.TrimSuffix(containerName, ".log")
-
-		podNameLabelColor := podName
-		if podName == previousPod {
-			podNameLabelColor = pterm.Gray(podName)
-		}
-		tableData = append(tableData, []string{podNameLabelColor, containerName, convertBytes(fileInfo.Size())})
-		previousPod = podName
-	}
-	err := pterm.DefaultTable.WithHasHeader().WithBoxed().WithData(tableData).Render()
-	if err != nil {
-		pterm.Error.Printfln("Error rendering table")
-	}
-}
-
-// streamLog streams logs for the container
-func streamLog(pod v1.Pod, container v1.Container, logFile *os.File, logOpts v1.PodLogOptions) {
-	defer wg.Done()
-	if *follow {
-		defer func() {
-			pterm.Warning.Printfln("Streaming logs ended prematurely for Pod: %s, Container: %s", pod.Name, container.Name)
-		}()
-	}
-
-	logOpts.Container = container.Name
-	// get logs for the container
-	req := client.CoreV1().Pods(*namespace).GetLogs(pod.Name, &logOpts)
-
-	// get logs
-	logs, err := req.Stream(context.Background())
-	if err != nil {
-		pterm.Error.Printfln("Error getting logs for container %s\n%v", container.Name, err)
-		return
-	}
-	defer func(logs io.ReadCloser) {
-		err := logs.Close()
-		if err != nil {
-			panic(err.Error())
-		}
-	}(logs)
-
-	writeLogToDisk(logs, logFile)
-
-}
-
-func createLogFile(podName string, containerName string) *os.File {
-	logName := fmt.Sprintf("%s%s%s.log", podName, fileNameSeparator, containerName)
-
-	// Create the log file
-	if err := os.MkdirAll(*logPath, 0755); err != nil {
-		panic(err.Error())
-	}
-	logFilePath := filepath.Join(*logPath, logName)
-	logFile, err := os.Create(logFilePath)
-
-	if err != nil {
-		panic(err.Error())
-	}
-
-	return logFile
-}
-
-// writeLogToDisk writes logs to disk
-func writeLogToDisk(logs io.ReadCloser, logFile *os.File) {
-	reader := bufio.NewReader(logs)
-
-	// Create a buffered reader and writer
-	writer := bufio.NewWriter(logFile)
-
-	// Copy data from the reader to the writer
-	if _, err := io.Copy(writer, reader); err != nil {
-		panic(err.Error())
-	}
-
-	// Flush any remaining data to the file
-	if err := writer.Flush(); err != nil {
-		panic(err.Error())
-	}
-}
-
-// findPodByLabel finds pods by label
-func findPodByLabel(label string) v1.PodList {
-	pterm.Info.Printf("Getting Pods with label %s\n\n", pterm.Green(label))
-
-	pods, err := client.CoreV1().Pods(*namespace).List(context.TODO(), metav1.ListOptions{
-		LabelSelector: label,
-	})
-	if statusError, isStatus := err.(*errors.StatusError); isStatus {
-		fmt.Printf("Error getting pods in namespace %s: %v\n",
-			*namespace, statusError.ErrStatus.Message)
-	}
-	if err != nil {
-		panic(err.Error())
-	}
-
-	// if pods are not found print message
-	if len(pods.Items) == 0 {
-		pterm.Error.Printfln(pterm.Sprintf("No pods found in namespace %s with label %s\n", *namespace, label))
-	}
-
-	return *pods
-}
-
-func pressKeyToExit() {
-	t, errTty := tty.Open()
-	if errTty != nil {
-		panic(errTty)
-	}
-	defer t.Close()
-
-	// race condition with spinner: known issue, we don't care
-	spinnerLog, _ := pterm.DefaultSpinner.WithSequence(".  ", ".. ", ".|.", " ..", "  .").WithRemoveWhenDone(true).Start(pterm.Sprintf("Press %s to stop streaming logs in %s", pterm.Green("q"), pterm.Green(*logPath)))
-	defer spinnerLog.Stop()
-
-	for {
-		key, err := t.ReadRune()
-		if err != nil {
-			panic(err)
-		}
-		// if pressed q or Q
-		if key == 113 || key == 81 {
-			//pterm.Info.Printfln("Exiting")
-			break
-		}
-	}
-}
-
-func convertBytes(bytes int64) string {
-	if bytes == 0 {
-		return pterm.Red("0 B")
-	}
-	if bytes < 1024 {
-		return pterm.Sprintf("%d B", bytes)
-	}
-	if bytes < 1024*1024 {
-		return pterm.Sprintf("%d KB", bytes/1024)
-	}
-	return pterm.Sprintf("%d MB", bytes/1024/1024)
-}
-
 var rootCmd = &cobra.Command{
 	Use:   "klogs",
 	Short: "Get logs from Pods, super fast! 🚀",
@@ -440,7 +72,6 @@ var rootCmd = &cobra.Command{
 It is designed to be fast and efficient, and can get logs from multiple Pods/Containers at once. Blazing fast. 🔥`,
 
 	Run: func(cmd *cobra.Command, args []string) {
-		var podList v1.PodList
 
 		if *printVersion {
 			pterm.Info.Printfln("Version: %s", BuildVersion)
@@ -448,29 +79,30 @@ It is designed to be fast and efficient, and can get logs from multiple Pods/Con
 		}
 
 		splashScreen()
-
 		configClient()
-		configNamespace()
 
-		if len(*labels) == 0 {
-			podList = listAllPods()
+		getClusterInfo(namespace, &kubeCtx)
+		podList := getPodListByFlags(true)
+
+		// start multithreaded goroutines
+
+		// process pods
+		wg.Add(1)
+		go processPods(&wg)
+		addPodsToMonitor(podList)
+
+		if *follow {
+			pterm.Info.Printfln("Streaming" + pterm.Green(" ON"))
+			go checkNewPods(&wg)
+			startTviewApp()
 		} else {
-			for _, l := range *labels {
-				podList.Items = append(podList.Items, findPodByLabel(l).Items...)
-			}
-		}
-
-		logFiles := getPodLogs(podList, getLopOpts())
-
-		if *follow && len(logFiles) > 0 {
-			// press a key to terminate the process
-			pressKeyToExit()
-		} else {
-			// wait for all goroutines to finish
+			pterm.Info.Printfln("Streaming" + pterm.Green(" OFF"))
+			close(podsChannel) // read only channel
 			wg.Wait()
+			//fmt.Printf("DONE. Closing channel\n")
 		}
 
-		printLogSize(logFiles)
+		footer()
 	},
 }
 
@@ -493,5 +125,4 @@ func init() {
 	follow = rootCmd.Flags().BoolP("follow", "f", false, "Specify if the logs should be streamed")
 	printVersion = rootCmd.Flags().BoolP("version", "v", false, "Print the version of the tool")
 	initContainer = rootCmd.Flags().BoolP("init", "i", false, "Get logs for init containers")
-
 }
