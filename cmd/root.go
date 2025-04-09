@@ -28,7 +28,6 @@ var (
 	labels                                *[]string
 	tail                                  *int64
 	follow                                *bool
-	printVersion                          *bool
 )
 
 var (
@@ -70,13 +69,12 @@ var rootCmd = &cobra.Command{
 	Short: "Get logs from Pods, super fast! 🚀",
 	Long: `klogs is a CLI tool to get logs from Kubernetes Pods.
 It is designed to be fast and efficient, and can get logs from multiple Pods/Containers at once. Blazing fast. 🔥`,
-
+	Example: "  klogs -n my-namespace\n" +
+		"  klogs -n my-namespace -l app=my-app\n" +
+		"  klogs -n my-namespace -l app=my-app -l tier=backend\n" +
+		"  klogs -n my-namespace -a -f -i -s 5m -t 100 -p /tmp/logs\n",
+	Version: pterm.Green(BuildVersion),
 	Run: func(cmd *cobra.Command, args []string) {
-
-		if *printVersion {
-			pterm.Info.Printfln("Version: %s", BuildVersion)
-			os.Exit(0)
-		}
 
 		splashScreen()
 		configClient()
@@ -123,6 +121,5 @@ func init() {
 	since = rootCmd.Flags().StringP("since", "s", "", "Only return logs newer than a relative duration like 5s, 2m, or 3h. Defaults to all logs.")
 	tail = rootCmd.Flags().Int64P("tail", "t", -1, "Lines of the most recent log to save")
 	follow = rootCmd.Flags().BoolP("follow", "f", false, "Specify if the logs should be streamed")
-	printVersion = rootCmd.Flags().BoolP("version", "v", false, "Print the version of the tool")
 	initContainer = rootCmd.Flags().BoolP("init", "i", false, "Get logs for init containers")
 }
