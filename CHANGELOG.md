@@ -1,5 +1,10 @@
 # Changelog
 
+## [v1.2.1] - 2025-05-31
+### :wrench: Chores
+- [`50ba595`](https://github.com/rogosprojects/klogs/commit/50ba595d58e6445b0c63add4d7775ba804e5bf7b) - support Windows builds *(commit by [@rogosprojects](https://github.com/rogosprojects))*
+
+
 ## [v1.1.21] - 2024-09-03
 ### :bug: Bug Fixes
 - [`10b3d5b`](https://github.com/rogosprojects/klogs/commit/10b3d5bed1e223730a298fe93affad253acf9f41) - fix: warn if stream ends prematurely *(commit by [@rogosprojects](https://github.com/rogosprojects))*
@@ -86,3 +91,4 @@ Initial public release
 [v1.1.18]: https://github.com/rogosprojects/klogs/compare/v1.1.17...v1.1.18
 [v1.1.20]: https://github.com/rogosprojects/klogs/compare/v1.1.19...v1.1.20
 [v1.1.21]: https://github.com/rogosprojects/klogs/compare/v1.1.20...v1.1.21
+[v1.2.1]: https://github.com/rogosprojects/klogs/compare/v1.2.1-beta...v1.2.1
